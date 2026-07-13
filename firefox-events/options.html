@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Local Browser Events</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main>
+      <h1>Local Browser Events</h1>
+      <p class="lead">
+        События отправляются в локальный gateway. Текст страниц, значения форм,
+        query-параметры и приватные окна не собираются.
+      </p>
+
+      <form id="settings-form">
+        <label class="checkbox">
+          <input id="enabled" type="checkbox">
+          <span>Сбор событий включён</span>
+        </label>
+
+        <label for="endpoint">HTTP endpoint</label>
+        <input id="endpoint" type="url" required placeholder="http://localhost:1234/events">
+
+        <label class="checkbox">
+          <input id="collect-clicks" type="checkbox">
+          <span>Собирать клики на обычных веб-страницах</span>
+        </label>
+
+        <label class="checkbox">
+          <input id="collect-performance" type="checkbox">
+          <span>Собирать показатели загрузки страниц</span>
+        </label>
+
+        <label class="checkbox">
+          <input id="include-path" type="checkbox">
+          <span>Добавлять URL path (query и fragment всегда удаляются)</span>
+        </label>
+
+        <label for="idle-timeout">Порог неактивности, секунд</label>
+        <input id="idle-timeout" type="number" min="15" max="3600" step="1" required>
+
+        <div class="actions">
+          <button type="submit">Сохранить</button>
+          <button id="flush" type="button" class="secondary">Отправить очередь</button>
+          <button id="clear" type="button" class="danger">Очистить очередь</button>
+        </div>
+      </form>
+
+      <section aria-live="polite">
+        <h2>Состояние доставки</h2>
+        <pre id="status">Загрузка…</pre>
+      </section>
+    </main>
+
+    <script src="options.js"></script>
+  </body>
+</html>

@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "name": "Local Browser Events",
+  "version": "0.1.0",
+  "description": "Collects privacy-conscious Firefox activity events and sends them to a local HTTP gateway.",
+  "incognito": "not_allowed",
+  "permissions": [
+    "alarms",
+    "idle",
+    "storage",
+    "tabs",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "local-browser-events@jaennil.dev",
+      "data_collection_permissions": {
+        "required": [
+          "browsingActivity"
+        ],
+        "optional": [
+          "technicalAndInteraction",
+          "websiteActivity"
+        ]
+      },
+      "strict_min_version": "142.0"
+    }
+  }
+}
