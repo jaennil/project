@@ -86,20 +86,10 @@ services:
   grafana:
     image: grafana/grafana:13.1.0
     container_name: grafana
-    depends_on:
-      clickhouse:
-        condition: service_healthy
     ports:
       - "${GRAFANA_PORT:-3002}:3000"
-    environment:
-      GF_PLUGINS_PREINSTALL_SYNC: grafana-clickhouse-datasource@4.19.0
-      GF_PLUGINS_PREINSTALL_AUTO_UPDATE: "false"
-      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD:-app}"
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
-      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./grafana/dashboards:/etc/grafana/dashboards:ro
 
   gateway:
     build:
