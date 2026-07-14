@@ -83,6 +83,14 @@ services:
       retries: 10
       start_period: 10s
 
+  grafana:
+    image: grafana/grafana:13.1.0
+    container_name: grafana
+    ports:
+      - "${GRAFANA_PORT:-3002}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+
   gateway:
     build:
       context: ./gateway
@@ -118,3 +126,4 @@ volumes:
   kafka-data:
   clickhouse-data:
   clickhouse-logs:
+  grafana-data:
