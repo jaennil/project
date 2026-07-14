@@ -25,6 +25,12 @@ h2 {
   color: color-mix(in srgb, CanvasText 72%, transparent);
 }
 
+.hint {
+  margin: -6px 0 4px 26px;
+  color: color-mix(in srgb, CanvasText 68%, transparent);
+  font-size: 0.9rem;
+}
+
 form {
   display: grid;
   gap: 12px;

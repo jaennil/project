@@ -5,8 +5,12 @@ const DEFAULT_OPTIONS = Object.freeze({
   endpoint: "http://localhost:1234/events",
   collectClicks: false,
   collectPerformance: false,
+  collectNetwork: false,
+  collectPageActivity: false,
+  collectErrors: false,
   includePath: false,
   idleTimeoutSeconds: 60,
+  heartbeatIntervalSeconds: 10,
 });
 
 const form = document.querySelector("#settings-form");
@@ -14,8 +18,12 @@ const enabledInput = document.querySelector("#enabled");
 const endpointInput = document.querySelector("#endpoint");
 const collectClicksInput = document.querySelector("#collect-clicks");
 const collectPerformanceInput = document.querySelector("#collect-performance");
+const collectNetworkInput = document.querySelector("#collect-network");
+const collectPageActivityInput = document.querySelector("#collect-page-activity");
+const collectErrorsInput = document.querySelector("#collect-errors");
 const includePathInput = document.querySelector("#include-path");
 const idleTimeoutInput = document.querySelector("#idle-timeout");
+const heartbeatIntervalInput = document.querySelector("#heartbeat-interval");
 const flushButton = document.querySelector("#flush");
 const clearButton = document.querySelector("#clear");
 const statusOutput = document.querySelector("#status");
@@ -30,11 +38,14 @@ function validateEndpoint(value) {
 
 async function updateOptionalDataPermissions() {
   const requested = [];
-  if (collectClicksInput.checked) {
+  if (collectClicksInput.checked || collectPageActivityInput.checked) {
     requested.push("websiteActivity");
   }
-  if (collectPerformanceInput.checked) {
+  if (collectPerformanceInput.checked || collectErrorsInput.checked) {
     requested.push("technicalAndInteraction");
+  }
+  if (collectNetworkInput.checked) {
+    requested.push("websiteContent");
   }
 
   if (requested.length > 0) {
@@ -45,11 +56,14 @@ async function updateOptionalDataPermissions() {
   }
 
   const noLongerNeeded = [];
-  if (!collectClicksInput.checked) {
+  if (!collectClicksInput.checked && !collectPageActivityInput.checked) {
     noLongerNeeded.push("websiteActivity");
   }
-  if (!collectPerformanceInput.checked) {
+  if (!collectPerformanceInput.checked && !collectErrorsInput.checked) {
     noLongerNeeded.push("technicalAndInteraction");
+  }
+  if (!collectNetworkInput.checked) {
+    noLongerNeeded.push("websiteContent");
   }
 
   if (noLongerNeeded.length > 0) {
@@ -64,12 +78,23 @@ function renderStatus(result, message) {
   }
 
   lines.push(`В очереди: ${result?.queued ?? 0}`);
+  lines.push(`Удалено при переполнении: ${result?.dropped ?? 0}`);
+  lines.push(`Отклонено gateway: ${result?.rejected ?? 0}`);
+  if (result?.lastRejectedEvent) {
+    lines.push(
+      `Последнее отклонение: HTTP ${result.lastRejectedEvent.http_status} ` +
+        `${result.lastRejectedEvent.event_type}`,
+    );
+  }
 
   const delivery = result?.deliveryStatus;
   if (delivery) {
     lines.push(`Состояние: ${delivery.state}`);
     if (delivery.updated_at) {
       lines.push(`Обновлено: ${delivery.updated_at}`);
+    }
+    if (delivery.retry_at) {
+      lines.push(`Следующая попытка: ${delivery.retry_at}`);
     }
     if (delivery.error) {
       lines.push(`Ошибка: ${delivery.error}`);
@@ -86,12 +111,23 @@ async function refreshStatus(message) {
 
 async function loadOptions() {
   const options = await browser.storage.local.get(DEFAULT_OPTIONS);
+  const permissions = await browser.permissions.getAll();
+  const granted = new Set(permissions.data_collection ?? []);
   enabledInput.checked = options.enabled;
   endpointInput.value = options.endpoint;
-  collectClicksInput.checked = options.collectClicks;
-  collectPerformanceInput.checked = options.collectPerformance;
+  collectClicksInput.checked =
+    options.collectClicks && granted.has("websiteActivity");
+  collectPerformanceInput.checked =
+    options.collectPerformance && granted.has("technicalAndInteraction");
+  collectNetworkInput.checked =
+    options.collectNetwork && granted.has("websiteContent");
+  collectPageActivityInput.checked =
+    options.collectPageActivity && granted.has("websiteActivity");
+  collectErrorsInput.checked =
+    options.collectErrors && granted.has("technicalAndInteraction");
   includePathInput.checked = options.includePath;
   idleTimeoutInput.value = options.idleTimeoutSeconds;
+  heartbeatIntervalInput.value = options.heartbeatIntervalSeconds;
   await refreshStatus();
 }
 
@@ -106,13 +142,25 @@ form.addEventListener("submit", async (event) => {
       throw new Error("Порог неактивности должен быть от 15 до 3600 секунд");
     }
 
+    const heartbeatIntervalSeconds = Number.parseInt(
+      heartbeatIntervalInput.value,
+      10,
+    );
+    if (heartbeatIntervalSeconds < 5 || heartbeatIntervalSeconds > 300) {
+      throw new Error("Интервал heartbeat должен быть от 5 до 300 секунд");
+    }
+
     await browser.storage.local.set({
       enabled: enabledInput.checked,
       endpoint: validateEndpoint(endpointInput.value),
       collectClicks: collectClicksInput.checked,
       collectPerformance: collectPerformanceInput.checked,
+      collectNetwork: collectNetworkInput.checked,
+      collectPageActivity: collectPageActivityInput.checked,
+      collectErrors: collectErrorsInput.checked,
       includePath: includePathInput.checked,
       idleTimeoutSeconds,
+      heartbeatIntervalSeconds,
     });
 
     await refreshStatus("Настройки сохранены");

@@ -34,12 +34,37 @@
         </label>
 
         <label class="checkbox">
+          <input id="collect-network" type="checkbox">
+          <span>Собирать завершённые и ошибочные сетевые запросы страниц</span>
+        </label>
+        <p class="hint">
+          Даёт самый большой поток: домен ресурса, тип, метод, HTTP status,
+          длительность и попадание в кэш. Полные URL, headers и body не сохраняются.
+        </p>
+
+        <label class="checkbox">
+          <input id="collect-page-activity" type="checkbox">
+          <span>Собирать heartbeat, скролл, фокус страницы и media-события</span>
+        </label>
+
+        <label class="checkbox">
+          <input id="collect-errors" type="checkbox">
+          <span>Собирать JavaScript-ошибки и ошибки загрузки ресурсов</span>
+        </label>
+        <p class="hint">
+          Тексты ошибок, stack trace и значения Promise rejection не отправляются.
+        </p>
+
+        <label class="checkbox">
           <input id="include-path" type="checkbox">
           <span>Добавлять URL path (query и fragment всегда удаляются)</span>
         </label>
 
         <label for="idle-timeout">Порог неактивности, секунд</label>
         <input id="idle-timeout" type="number" min="15" max="3600" step="1" required>
+
+        <label for="heartbeat-interval">Интервал активного heartbeat, секунд</label>
+        <input id="heartbeat-interval" type="number" min="5" max="300" step="1" required>
 
         <div class="actions">
           <button type="submit">Сохранить</button>
