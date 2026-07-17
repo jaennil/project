@@ -24,7 +24,7 @@ func newEventSender(url string, timeout time.Duration) *eventSender {
 	}
 }
 
-func (s *eventSender) send(ctx context.Context, event *usageEvent) error {
+func (s *eventSender) send(ctx context.Context, event any) error {
 	body, err := json.Marshal(event)
 	if err != nil {
 		return err

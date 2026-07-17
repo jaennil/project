@@ -118,6 +118,10 @@ func (c *collector) processFile(ctx context.Context, file sourceFile, stats *sca
 		checkpoint = fileCheckpoint{}
 		exists = false
 	}
+	if checkpoint.ParserVersion != parserStateVersion {
+		checkpoint = fileCheckpoint{ParserVersion: parserStateVersion}
+		exists = false
+	}
 	if !exists && !c.backfill {
 		checkpoint.Offset = info.Size()
 		return c.store.saveCheckpoint(key, checkpoint)
@@ -126,7 +130,8 @@ func (c *collector) processFile(ctx context.Context, file sourceFile, stats *sca
 		return err
 	}
 
-	initial := checkpoint
+	initialOffset := checkpoint.Offset
+	initialVersion := checkpoint.ParserVersion
 	reader := bufio.NewReaderSize(opened, 64*1024)
 	for {
 		lineOffset := checkpoint.Offset
@@ -150,27 +155,42 @@ func (c *collector) processFile(ctx context.Context, file sourceFile, stats *sca
 			parsedCheckpoint.Offset = next.Offset
 			next = parsedCheckpoint
 			if event != nil {
-				if !c.store.reserve(event.EventID) {
-					stats.skipped.Add(1)
-					checkpoint = next
-					continue
-				}
-				if err := c.sender.send(ctx, event); err != nil {
-					c.store.release(event.EventID)
+				if err := c.sendEvent(ctx, event.EventID, event, stats); err != nil {
 					return err
 				}
-				if err := c.store.commit(event.EventID); err != nil {
-					return fmt.Errorf("persist event id: %w", err)
-				}
-				stats.sent.Add(1)
 			}
 		}
 		checkpoint = next
 	}
 
-	if checkpoint != initial {
+	if checkpoint.Offset != initialOffset {
+		metrics := buildMetricsEvent(file.Provider, file.Path, checkpoint.Offset, checkpoint)
+		if metrics != nil {
+			if err := c.sendEvent(ctx, metrics.EventID, metrics, stats); err != nil {
+				return err
+			}
+		}
+	}
+
+	if checkpoint.Offset != initialOffset || checkpoint.ParserVersion != initialVersion {
 		return c.store.saveCheckpoint(key, checkpoint)
 	}
+	return nil
+}
+
+func (c *collector) sendEvent(ctx context.Context, eventID string, event any, stats *scanStats) error {
+	if !c.store.reserve(eventID) {
+		stats.skipped.Add(1)
+		return nil
+	}
+	if err := c.sender.send(ctx, event); err != nil {
+		c.store.release(eventID)
+		return err
+	}
+	if err := c.store.commit(eventID); err != nil {
+		return fmt.Errorf("persist event id: %w", err)
+	}
+	stats.sent.Add(1)
 	return nil
 }
 
@@ -179,10 +199,21 @@ func shouldParse(provider string, line []byte) bool {
 	case providerCodex:
 		return bytes.Contains(line, []byte(`"type":"session_meta"`)) ||
 			bytes.Contains(line, []byte(`"type":"turn_context"`)) ||
-			bytes.Contains(line, []byte(`"type":"token_count"`))
+			bytes.Contains(line, []byte(`"type":"token_count"`)) ||
+			bytes.Contains(line, []byte(`"type":"function_call"`)) ||
+			bytes.Contains(line, []byte(`"type":"custom_tool_call"`)) ||
+			bytes.Contains(line, []byte(`"type":"web_search_call"`)) ||
+			bytes.Contains(line, []byte(`"type":"tool_search_call"`)) ||
+			bytes.Contains(line, []byte(`"type":"exec_command_end"`)) ||
+			bytes.Contains(line, []byte(`"type":"patch_apply_end"`)) ||
+			bytes.Contains(line, []byte(`"type":"mcp_tool_call_end"`)) ||
+			bytes.Contains(line, []byte(`"type":"turn_aborted"`)) ||
+			bytes.Contains(line, []byte(`"type":"task_started"`)) ||
+			bytes.Contains(line, []byte(`"type":"task_complete"`))
 	case providerClaudeCode:
-		return bytes.Contains(line, []byte(`"type":"assistant"`)) &&
-			bytes.Contains(line, []byte(`"usage"`))
+		return bytes.Contains(line, []byte(`"type":"assistant"`)) ||
+			bytes.Contains(line, []byte(`"type":"user"`)) ||
+			bytes.Contains(line, []byte(`"interruptedMessageId"`))
 	default:
 		return false
 	}

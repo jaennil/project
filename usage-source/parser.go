@@ -14,23 +14,38 @@ const (
 )
 
 type fileCheckpoint struct {
-	Offset     int64      `json:"offset"`
-	SessionID  string     `json:"session_id,omitempty"`
-	Project    string     `json:"project,omitempty"`
-	Model      string     `json:"model,omitempty"`
-	CodexTotal tokenUsage `json:"codex_total,omitempty"`
+	ParserVersion    int            `json:"parser_version"`
+	Offset           int64          `json:"offset"`
+	SessionID        string         `json:"session_id,omitempty"`
+	Project          string         `json:"project,omitempty"`
+	Model            string         `json:"model,omitempty"`
+	SessionStartedAt time.Time      `json:"session_started_at,omitempty"`
+	LastActivityAt   time.Time      `json:"last_activity_at,omitempty"`
+	CodexTotal       tokenUsage     `json:"codex_total,omitempty"`
+	Metrics          sessionMetrics `json:"metrics,omitempty"`
 }
 
 type codexRecord struct {
 	Timestamp string `json:"timestamp"`
 	Type      string `json:"type"`
 	Payload   struct {
-		Type               string `json:"type"`
-		ID                 string `json:"id"`
-		CWD                string `json:"cwd"`
-		Model              string `json:"model"`
-		ModelContextWindow int64  `json:"model_context_window"`
-		Info               *struct {
+		Type               string          `json:"type"`
+		ID                 string          `json:"id"`
+		CWD                string          `json:"cwd"`
+		Model              string          `json:"model"`
+		ModelContextWindow int64           `json:"model_context_window"`
+		Name               string          `json:"name"`
+		CallID             string          `json:"call_id"`
+		Command            json.RawMessage `json:"command"`
+		ExitCode           *int            `json:"exit_code"`
+		Success            *bool           `json:"success"`
+		Arguments          string          `json:"arguments"`
+		Input              string          `json:"input"`
+		Changes            map[string]struct {
+			UnifiedDiff string `json:"unified_diff"`
+		} `json:"changes"`
+		Result json.RawMessage `json:"result"`
+		Info   *struct {
 			LastTokenUsage     *tokenUsage `json:"last_token_usage"`
 			TotalTokenUsage    tokenUsage  `json:"total_token_usage"`
 			ModelContextWindow int64       `json:"model_context_window"`
@@ -39,17 +54,19 @@ type codexRecord struct {
 }
 
 type claudeRecord struct {
-	Timestamp   string `json:"timestamp"`
-	Type        string `json:"type"`
-	CWD         string `json:"cwd"`
-	SessionID   string `json:"sessionId"`
-	RequestID   string `json:"requestId"`
-	UUID        string `json:"uuid"`
-	IsSidechain bool   `json:"isSidechain"`
-	Message     struct {
-		ID    string `json:"id"`
-		Model string `json:"model"`
-		Usage *struct {
+	Timestamp            string `json:"timestamp"`
+	Type                 string `json:"type"`
+	CWD                  string `json:"cwd"`
+	SessionID            string `json:"sessionId"`
+	RequestID            string `json:"requestId"`
+	UUID                 string `json:"uuid"`
+	IsSidechain          bool   `json:"isSidechain"`
+	InterruptedMessageID string `json:"interruptedMessageId"`
+	Message              struct {
+		ID      string          `json:"id"`
+		Model   string          `json:"model"`
+		Content json.RawMessage `json:"content"`
+		Usage   *struct {
 			InputTokens              int64  `json:"input_tokens"`
 			CacheCreationInputTokens int64  `json:"cache_creation_input_tokens"`
 			CacheReadInputTokens     int64  `json:"cache_read_input_tokens"`
@@ -62,6 +79,21 @@ type claudeRecord struct {
 			} `json:"cache_creation"`
 		} `json:"usage"`
 	} `json:"message"`
+}
+
+type claudeContent struct {
+	Type      string `json:"type"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	ToolUseID string `json:"tool_use_id"`
+	IsError   bool   `json:"is_error"`
+	Input     struct {
+		Command   string `json:"command"`
+		FilePath  string `json:"file_path"`
+		OldString string `json:"old_string"`
+		NewString string `json:"new_string"`
+		Content   string `json:"content"`
+	} `json:"input"`
 }
 
 func parseUsageLine(provider, path string, offset int64, line []byte, checkpoint fileCheckpoint) (fileCheckpoint, *usageEvent, error) {
@@ -80,6 +112,8 @@ func parseCodexLine(path string, offset int64, line []byte, checkpoint fileCheck
 	if err := json.Unmarshal(line, &record); err != nil {
 		return checkpoint, nil, err
 	}
+	checkpoint.observeTimestamp(record.Timestamp)
+	observeCodexMetrics(&checkpoint, record)
 
 	switch record.Type {
 	case "session_meta":
@@ -135,7 +169,7 @@ func parseCodexLine(path string, offset int64, line []byte, checkpoint fileCheck
 	event := &usageEvent{
 		SchemaVersion: schemaVersion,
 		EventID:       makeEventID(providerCodex, sessionID, path, strconv.FormatInt(offset, 10)),
-		EventType:     eventType,
+		EventType:     usageEventType,
 		OccurredAt:    normalizedTimestamp(record.Timestamp),
 		Source:        eventSource,
 		SessionID:     sessionID,
@@ -159,10 +193,8 @@ func parseClaudeLine(path string, offset int64, line []byte, checkpoint fileChec
 	if err := json.Unmarshal(line, &record); err != nil {
 		return checkpoint, nil, err
 	}
-	if record.Type != "assistant" || record.Message.Usage == nil {
-		return checkpoint, nil, nil
-	}
-
+	checkpoint.observeTimestamp(record.Timestamp)
+	observeClaudeMetrics(&checkpoint, record)
 	if record.SessionID != "" {
 		checkpoint.SessionID = record.SessionID
 	}
@@ -171,6 +203,9 @@ func parseClaudeLine(path string, offset int64, line []byte, checkpoint fileChec
 	}
 	if record.Message.Model != "" {
 		checkpoint.Model = record.Message.Model
+	}
+	if record.Type != "assistant" || record.Message.Usage == nil {
+		return checkpoint, nil, nil
 	}
 
 	sessionID := checkpoint.SessionID
@@ -191,7 +226,7 @@ func parseClaudeLine(path string, offset int64, line []byte, checkpoint fileChec
 	event := &usageEvent{
 		SchemaVersion: schemaVersion,
 		EventID:       makeEventID(providerClaudeCode, identity),
-		EventType:     eventType,
+		EventType:     usageEventType,
 		OccurredAt:    normalizedTimestamp(record.Timestamp),
 		Source:        eventSource,
 		SessionID:     sessionID,
@@ -212,6 +247,98 @@ func parseClaudeLine(path string, offset int64, line []byte, checkpoint fileChec
 		},
 	}
 	return checkpoint, event, nil
+}
+
+func observeCodexMetrics(checkpoint *fileCheckpoint, record codexRecord) {
+	switch record.Type {
+	case "response_item":
+		switch record.Payload.Type {
+		case "function_call", "custom_tool_call", "web_search_call", "tool_search_call":
+			checkpoint.Metrics.ToolCalls++
+		}
+	case "event_msg":
+		switch record.Payload.Type {
+		case "exec_command_end":
+			failed := record.Payload.ExitCode != nil && *record.Payload.ExitCode != 0
+			if failed {
+				checkpoint.Metrics.ToolErrors++
+			}
+			classified := classifyCommand(commandText(record.Payload.Command))
+			if classified.Test {
+				checkpoint.Metrics.TestsRun++
+				if failed {
+					checkpoint.Metrics.TestsFailed++
+				}
+			}
+			if !failed && classified.Commit {
+				checkpoint.Metrics.Committed = true
+			}
+			if !failed && classified.Revert {
+				checkpoint.Metrics.Reverted = true
+			}
+		case "patch_apply_end":
+			if record.Payload.Success != nil && !*record.Payload.Success {
+				checkpoint.Metrics.ToolErrors++
+				return
+			}
+			for path, change := range record.Payload.Changes {
+				added, deleted := diffLineCounts(change.UnifiedDiff)
+				checkpoint.Metrics.changeFile(path, added, deleted)
+			}
+		case "mcp_tool_call_end":
+			var result map[string]json.RawMessage
+			if json.Unmarshal(record.Payload.Result, &result) == nil {
+				if _, failed := result["Err"]; failed {
+					checkpoint.Metrics.ToolErrors++
+				}
+			}
+		case "turn_aborted":
+			checkpoint.Metrics.UserInterruptions++
+		}
+	}
+}
+
+func commandText(raw json.RawMessage) string {
+	var command string
+	if json.Unmarshal(raw, &command) == nil {
+		return command
+	}
+	var arguments []string
+	if json.Unmarshal(raw, &arguments) == nil {
+		return strings.Join(arguments, " ")
+	}
+	return ""
+}
+
+func observeClaudeMetrics(checkpoint *fileCheckpoint, record claudeRecord) {
+	if record.InterruptedMessageID != "" {
+		checkpoint.Metrics.UserInterruptions++
+	}
+	var contents []claudeContent
+	if len(record.Message.Content) == 0 || json.Unmarshal(record.Message.Content, &contents) != nil {
+		return
+	}
+	for _, content := range contents {
+		switch content.Type {
+		case "tool_use":
+			checkpoint.Metrics.ToolCalls++
+			pending := tool{}
+			switch content.Name {
+			case "Bash":
+				pending = classifyCommand(content.Input.Command)
+			case "Edit":
+				pending.ChangedFileHash = fileHash(content.Input.FilePath)
+				pending.LinesAdded = textLineCount(content.Input.NewString)
+				pending.LinesDeleted = textLineCount(content.Input.OldString)
+			case "Write":
+				pending.ChangedFileHash = fileHash(content.Input.FilePath)
+				pending.LinesAdded = textLineCount(content.Input.Content)
+			}
+			checkpoint.Metrics.rememberTool(content.ID, pending)
+		case "tool_result":
+			checkpoint.Metrics.finishTool(content.ToolUseID, content.IsError)
+		}
+	}
 }
 
 func normalizedTimestamp(value string) string {

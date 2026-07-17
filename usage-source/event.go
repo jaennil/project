@@ -8,9 +8,12 @@ import (
 )
 
 const (
-	schemaVersion = 1
-	eventType     = "agent_usage"
-	eventSource   = "agent-usage-source"
+	schemaVersion      = 1
+	usageEventType     = "agent_usage"
+	metricsEventType   = "agent_session_metrics"
+	eventSource        = "agent-usage-source"
+	parserStateVersion = 3
+	metricsVersion     = 1
 )
 
 type usageEvent struct {
@@ -39,6 +42,34 @@ type usageProperties struct {
 	IsSidechain                bool   `json:"is_sidechain,omitempty"`
 	ServiceTier                string `json:"service_tier,omitempty"`
 	InferenceGeo               string `json:"inference_geo,omitempty"`
+}
+
+type metricsEvent struct {
+	SchemaVersion int               `json:"schema_version"`
+	EventID       string            `json:"event_id"`
+	EventType     string            `json:"event_type"`
+	OccurredAt    string            `json:"occurred_at"`
+	Source        string            `json:"source"`
+	SessionID     string            `json:"session_id"`
+	Properties    metricsProperties `json:"properties"`
+}
+
+type metricsProperties struct {
+	MetricsVersion    int    `json:"metrics_version"`
+	Provider          string `json:"provider"`
+	Project           string `json:"project,omitempty"`
+	Model             string `json:"model,omitempty"`
+	ToolCalls         int64  `json:"tool_calls"`
+	ToolErrors        int64  `json:"tool_errors"`
+	TestsRun          int64  `json:"tests_run"`
+	TestsFailed       int64  `json:"tests_failed"`
+	UserInterruptions int64  `json:"user_interruptions"`
+	FilesChanged      int64  `json:"files_changed"`
+	LinesAdded        int64  `json:"lines_added"`
+	LinesDeleted      int64  `json:"lines_deleted"`
+	Committed         bool   `json:"committed"`
+	Reverted          bool   `json:"reverted"`
+	SessionDurationMS int64  `json:"session_duration_ms"`
 }
 
 type tokenUsage struct {
