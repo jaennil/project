@@ -118,6 +118,29 @@ services:
     environment:
       KAFKA_BROKERS: kafka:19092
 
+  usage-source:
+    build:
+      context: ./usage-source
+      args:
+        APP_UID: "${LOCAL_UID:-1000}"
+        APP_GID: "${LOCAL_GID:-1000}"
+    container_name: usage-source
+    depends_on:
+      gateway:
+        condition: service_started
+    environment:
+      GATEWAY_URL: http://gateway:1234/events
+      CODEX_SESSIONS_DIR: /sessions/codex
+      CLAUDE_PROJECTS_DIR: /sessions/claude
+      STATE_DIR: /var/lib/usage-source
+      SCAN_INTERVAL: "${USAGE_SCAN_INTERVAL:-2s}"
+      WORKERS: "${USAGE_WORKERS:-8}"
+      BACKFILL: "${USAGE_BACKFILL:-true}"
+    volumes:
+      - "${HOME}/.codex/sessions:/sessions/codex:ro"
+      - "${HOME}/.claude/projects:/sessions/claude:ro"
+      - usage-source-data:/var/lib/usage-source
+
   processor:
     build:
       context: ./processor
@@ -143,3 +166,4 @@ volumes:
   clickhouse-logs:
   grafana-data:
   prometheus-data:
+  usage-source-data:
