@@ -46,18 +46,6 @@ services:
       retries: 10
       start_period: 10s
 
-  kafka-ui:
-    image: provectuslabs/kafka-ui:v0.7.2
-    container_name: kafka-ui
-    depends_on:
-      kafka:
-        condition: service_healthy
-    ports:
-      - "8080:8080"
-    environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:19092
-
   clickhouse:
     image: clickhouse/clickhouse-server:25.8.28.1
     container_name: clickhouse

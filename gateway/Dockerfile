@@ -23,6 +23,6 @@ COPY --from=builder /out/gateway /usr/local/bin/gateway
 
 USER gateway:gateway
 
-EXPOSE 1234
+EXPOSE 1235
 
 ENTRYPOINT ["/usr/local/bin/gateway"]
