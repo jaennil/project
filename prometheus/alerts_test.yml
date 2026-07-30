@@ -1,0 +1,40 @@
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'agent_rate_limit_reset_timestamp_seconds{provider="claude_code",limit="subscription",bucket="five_hour",window="5h"}'
+        values: '18000+0x60'
+      - series: 'agent_rate_limit_window_seconds{provider="claude_code",limit="subscription",bucket="five_hour",window="5h"}'
+        values: '18000+0x60'
+    promql_expr_test:
+      - expr: agent_rate_limit_linear_budget_ratio
+        eval_time: 1h
+        exp_samples:
+          - labels: 'agent_rate_limit_linear_budget_ratio{provider="claude_code",limit="subscription",bucket="five_hour",window="5h"}'
+            value: 0.2
+
+  - interval: 1m
+    input_series:
+      - series: 'agent_rate_limit_used_ratio{provider="claude_code",limit="subscription",bucket="five_hour",window="5h"}'
+        values: '0.25+0x65'
+      - series: 'agent_rate_limit_reset_timestamp_seconds{provider="claude_code",limit="subscription",bucket="five_hour",window="5h"}'
+        values: '18000+0x65'
+      - series: 'agent_rate_limit_window_seconds{provider="claude_code",limit="subscription",bucket="five_hour",window="5h"}'
+        values: '18000+0x65'
+    alert_rule_test:
+      - eval_time: 1h5m
+        alertname: AgentRateLimitPaceHigh
+        exp_alerts:
+          - exp_labels:
+              provider: claude_code
+              limit: subscription
+              bucket: five_hour
+              window: 5h
+              severity: warning
+            exp_annotations:
+              summary: "claude_code 5h usage is ahead of budget"
+              description: "Usage is above the linear budget for the current provider-defined reset window."

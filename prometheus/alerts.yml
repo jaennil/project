@@ -1,20 +1,36 @@
 groups:
   - name: agent-rate-limits
     rules:
-      - alert: AgentRateLimitWarning
+      - record: agent_rate_limit_linear_budget_ratio
+        expr: |
+          clamp(
+            (
+              time()
+              - (
+                agent_rate_limit_reset_timestamp_seconds
+                - agent_rate_limit_window_seconds
+              )
+            )
+            / agent_rate_limit_window_seconds,
+            0,
+            1
+          )
+
+      - alert: AgentRateLimitPaceHigh
         expr: |
           (
-            agent_rate_limit_used_ratio >= 0.80
-            and agent_rate_limit_used_ratio < 0.95
+            agent_rate_limit_used_ratio{window="5h"}
+            > on (provider, limit, bucket, window)
+            agent_rate_limit_linear_budget_ratio{window="5h"}
           )
           and on (provider, limit, bucket, window)
           (agent_rate_limit_reset_timestamp_seconds > time())
-        for: 1m
+        for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "{{ $labels.provider }} {{ $labels.window }} limit is above 80%"
-          description: "The {{ $labels.limit }} {{ $labels.bucket }} limit has less than 20% remaining."
+          summary: "{{ $labels.provider }} {{ $labels.window }} usage is ahead of budget"
+          description: "Usage is above the linear budget for the current provider-defined reset window."
 
       - alert: AgentRateLimitCritical
         expr: |

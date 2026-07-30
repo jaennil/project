@@ -52,7 +52,34 @@
           },
           "unit": "percent"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/budget$/"
+            },
+            "properties": [
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 12,
@@ -83,9 +110,16 @@
           "legendFormat": "{{provider}} {{window}} ({{bucket}})",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "100 * (agent_rate_limit_linear_budget_ratio and on (provider, limit, bucket, window) (agent_rate_limit_reset_timestamp_seconds > time()))",
+          "legendFormat": "{{provider}} {{window}} budget",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Account rate-limit usage",
+      "title": "Account rate-limit usage and alert budget",
       "type": "timeseries"
     },
     {
