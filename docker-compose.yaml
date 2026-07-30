@@ -73,24 +73,12 @@ services:
       retries: 10
       start_period: 10s
 
-  grafana:
-    image: grafana/grafana:13.1.0
-    container_name: grafana
-    restart: unless-stopped
-    ports:
-      - "${GRAFANA_PORT:-3002}:3000"
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
-      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
-
   prometheus:
     image: prom/prometheus:v3.13.1
     container_name: prometheus
     restart: unless-stopped
     ports:
-      - "${PROMETHEUS_PORT:-9090}:9090"
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
@@ -101,6 +89,29 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+
+  tuna:
+    image: yuccastream/tuna:0.34.2
+    container_name: tuna-project-ai-usage
+    restart: unless-stopped
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    network_mode: host
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    volumes:
+      - "${HOME}/.config/tuna/tuna.yml:/etc/tuna.yml:ro"
+    command:
+      - --config=/etc/tuna.yml
+      - --log=stdout
+      - --no-colors
+      - http
+      - 127.0.0.1:9090
+      - --subdomain=project-ai-usage
+      - --location=ru
+      - --cidr-allow=${GRAFANA_SERVER_CIDR:-188.32.5.65/32}
+      - --https-redirect
+      - --inspect=false
 
   gateway:
     build:
@@ -166,6 +177,5 @@ volumes:
   kafka-data:
   clickhouse-data:
   clickhouse-logs:
-  grafana-data:
   prometheus-data:
   usage-source-data:
