@@ -19,9 +19,9 @@ groups:
       - alert: AgentRateLimitPaceHigh
         expr: |
           (
-            agent_rate_limit_used_ratio{window="5h"}
+            agent_rate_limit_used_ratio
             > on (provider, limit, bucket, window)
-            agent_rate_limit_linear_budget_ratio{window="5h"}
+            agent_rate_limit_linear_budget_ratio
           )
           and on (provider, limit, bucket, window)
           (agent_rate_limit_reset_timestamp_seconds > time())

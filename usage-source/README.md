@@ -130,9 +130,10 @@ The Compose stack provisions the **Agent rate limits** Grafana dashboard. Its da
 budget line starts at zero at `reset_timestamp - window_seconds` and reaches 100% at
 the provider-reported reset timestamp. For a five-hour limit this is 20 percentage
 points per hour. Prometheus sends a warning when five-hour usage stays above this
-line for five minutes, and a critical alert at 95%. Alerts automatically stop after
-the reported reset timestamp; connect Prometheus to an Alertmanager or configure a
-Grafana contact point to deliver notifications.
+line for five minutes. The same proportional pace check applies to every other
+provider-reported window, and a critical alert fires at 95%. Alerts automatically
+stop after the reported reset timestamp; connect Prometheus to an Alertmanager or
+configure a Grafana contact point to deliver notifications.
 
 Set `LOCAL_UID` and `LOCAL_GID` before building if the session files belong to a
 host user other than `1000:1000`.

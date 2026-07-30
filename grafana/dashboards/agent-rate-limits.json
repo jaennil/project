@@ -3,7 +3,6 @@
     "list": []
   },
   "editable": true,
-  "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
   "links": [],
@@ -13,15 +12,16 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Solid purple: Claude Code usage. Red dashed: pace-alert boundary. Red short-dashed: critical alert at 95%.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "fixedColor": "purple",
+            "mode": "fixed"
           },
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 12,
@@ -33,32 +33,22 @@
           },
           "max": 100,
           "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 80
-              },
-              {
-                "color": "red",
-                "value": 95
-              }
-            ]
-          },
           "unit": "percent"
         },
         "overrides": [
           {
             "matcher": {
-              "id": "byRegexp",
-              "options": "/budget$/"
+              "id": "byFrameRefID",
+              "options": "B"
             },
             "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              },
               {
                 "id": "custom.fillOpacity",
                 "value": 0
@@ -66,34 +56,50 @@
               {
                 "id": "custom.lineStyle",
                 "value": {
-                  "dash": [
-                    10,
-                    10
-                  ],
+                  "dash": [10, 10],
                   "fill": "dash"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
                 }
               },
               {
-                "id": "custom.lineWidth",
-                "value": 2
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [2, 5],
+                  "fill": "dash"
+                }
               }
             ]
           }
         ]
       },
       "gridPos": {
-        "h": 12,
-        "w": 24,
+        "h": 9,
+        "w": 12,
         "x": 0,
         "y": 0
       },
       "id": 1,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ],
+          "calcs": ["lastNotNull", "max"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -106,20 +112,415 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * (agent_rate_limit_used_ratio and on (provider, limit, bucket, window) (agent_rate_limit_reset_timestamp_seconds > time()))",
-          "legendFormat": "{{provider}} {{window}} ({{bucket}})",
+          "expr": "100 * (agent_rate_limit_used_ratio{provider=\"claude_code\",window=\"5h\"} and on (provider, limit, bucket, window) (agent_rate_limit_reset_timestamp_seconds > time()))",
+          "legendFormat": "Claude Code usage",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "100 * (agent_rate_limit_linear_budget_ratio and on (provider, limit, bucket, window) (agent_rate_limit_reset_timestamp_seconds > time()))",
-          "legendFormat": "{{provider}} {{window}} budget",
+          "expr": "100 * (agent_rate_limit_linear_budget_ratio{provider=\"claude_code\",window=\"5h\"} and on (provider, limit, bucket, window) (agent_rate_limit_reset_timestamp_seconds > time()))",
+          "legendFormat": "alert boundary",
           "range": true,
           "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "vector(95) and on () count(agent_rate_limit_reset_timestamp_seconds{provider=\"claude_code\",window=\"5h\"} > time())",
+          "legendFormat": "critical 95%",
+          "range": true,
+          "refId": "C"
         }
       ],
-      "title": "Account rate-limit usage and alert budget",
+      "timeFrom": "6h",
+      "title": "Claude Code · 5-hour window",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Solid blue: Codex usage. Red dashed: pace-alert boundary. This panel is empty when Codex does not report a five-hour window.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "max": 100,
+          "min": 0,
+          "unit": "percent"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [10, 10],
+                  "fill": "dash"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [2, 5],
+                  "fill": "dash"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": ["lastNotNull", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "100 * (agent_rate_limit_used_ratio{provider=\"codex\",window=\"5h\"} and on (provider, limit, bucket, window) (agent_rate_limit_reset_timestamp_seconds > time()))",
+          "legendFormat": "Codex usage",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "100 * (agent_rate_limit_linear_budget_ratio{provider=\"codex\",window=\"5h\"} and on (provider, limit, bucket, window) (agent_rate_limit_reset_timestamp_seconds > time()))",
+          "legendFormat": "alert boundary",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "vector(95) and on () count(agent_rate_limit_reset_timestamp_seconds{provider=\"codex\",window=\"5h\"} > time())",
+          "legendFormat": "critical 95%",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "timeFrom": "6h",
+      "title": "Codex · 5-hour window",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Solid purple: Claude Code usage. Red dashed: pace-alert boundary. Red short-dashed: critical alert at 95%.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "purple",
+            "mode": "fixed"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "max": 100,
+          "min": 0,
+          "unit": "percent"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [10, 10],
+                  "fill": "dash"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [2, 5],
+                  "fill": "dash"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": ["lastNotNull", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "100 * (agent_rate_limit_used_ratio{provider=\"claude_code\",window=\"7d\"} and on (provider, limit, bucket, window) (agent_rate_limit_reset_timestamp_seconds > time()))",
+          "legendFormat": "Claude Code usage",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "100 * (agent_rate_limit_linear_budget_ratio{provider=\"claude_code\",window=\"7d\"} and on (provider, limit, bucket, window) (agent_rate_limit_reset_timestamp_seconds > time()))",
+          "legendFormat": "alert boundary",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "vector(95) and on () count(agent_rate_limit_reset_timestamp_seconds{provider=\"claude_code\",window=\"7d\"} > time())",
+          "legendFormat": "critical 95%",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "timeFrom": "7d",
+      "title": "Claude Code · 7-day window",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Solid blue: Codex usage. Red dashed: pace-alert boundary. Red short-dashed: critical alert at 95%.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "max": 100,
+          "min": 0,
+          "unit": "percent"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [10, 10],
+                  "fill": "dash"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [2, 5],
+                  "fill": "dash"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": ["lastNotNull", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "100 * (agent_rate_limit_used_ratio{provider=\"codex\",window=\"7d\"} and on (provider, limit, bucket, window) (agent_rate_limit_reset_timestamp_seconds > time()))",
+          "legendFormat": "Codex usage",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "100 * (agent_rate_limit_linear_budget_ratio{provider=\"codex\",window=\"7d\"} and on (provider, limit, bucket, window) (agent_rate_limit_reset_timestamp_seconds > time()))",
+          "legendFormat": "alert boundary",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "vector(95) and on () count(agent_rate_limit_reset_timestamp_seconds{provider=\"codex\",window=\"7d\"} > time())",
+          "legendFormat": "critical 95%",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "timeFrom": "7d",
+      "title": "Codex · 7-day window",
       "type": "timeseries"
     },
     {
@@ -132,22 +533,12 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 1800
-              },
-              {
-                "color": "green",
-                "value": 7200
-              }
+              {"color": "red", "value": null},
+              {"color": "orange", "value": 1800},
+              {"color": "green", "value": 7200}
             ]
           },
           "unit": "s"
@@ -158,18 +549,14 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 12
+        "y": 18
       },
-      "id": 2,
+      "id": 5,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -181,7 +568,7 @@
           "editorMode": "code",
           "expr": "clamp_min(agent_rate_limit_reset_timestamp_seconds - time(), 0)",
           "instant": true,
-          "legendFormat": "{{provider}} {{window}}",
+          "legendFormat": "{{provider}} · {{window}}",
           "range": false,
           "refId": "A"
         }
@@ -199,22 +586,12 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 900
-              },
-              {
-                "color": "red",
-                "value": 3600
-              }
+              {"color": "green", "value": null},
+              {"color": "orange", "value": 900},
+              {"color": "red", "value": 3600}
             ]
           },
           "unit": "s"
@@ -225,18 +602,14 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 12
+        "y": 18
       },
-      "id": 3,
+      "id": 6,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -248,7 +621,7 @@
           "editorMode": "code",
           "expr": "time() - agent_rate_limit_last_update_timestamp_seconds",
           "instant": true,
-          "legendFormat": "{{provider}} {{window}}",
+          "legendFormat": "{{provider}} · {{window}}",
           "range": false,
           "refId": "A"
         }
@@ -259,10 +632,7 @@
   ],
   "refresh": "15s",
   "schemaVersion": 42,
-  "tags": [
-    "agents",
-    "rate-limits"
-  ],
+  "tags": ["agents", "rate-limits"],
   "templating": {
     "list": []
   },
@@ -273,5 +643,5 @@
   "timezone": "browser",
   "title": "Agent rate limits",
   "uid": "agent-rate-limits",
-  "version": 1
+  "version": 2
 }
