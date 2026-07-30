@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -18,6 +20,7 @@ type config struct {
 	StateDirectory  string
 	ScanInterval    time.Duration
 	HTTPTimeout     time.Duration
+	HTTPAddress     string
 	Workers         int
 	Backfill        bool
 }
@@ -34,6 +37,11 @@ func main() {
 			slog.Error("close usage source state", "error", err)
 		}
 	}()
+	limits, err := openRateLimitStore(configuration.StateDirectory)
+	if err != nil {
+		slog.Error("open rate limit state", "error", err)
+		os.Exit(1)
+	}
 
 	usageCollector := &collector{
 		sources: []sourceDirectory{
@@ -44,15 +52,37 @@ func main() {
 		backfill: configuration.Backfill,
 		store:    store,
 		sender:   newEventSender(configuration.GatewayURL, configuration.HTTPTimeout),
+		limits:   limits,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	server := &http.Server{
+		Addr:              configuration.HTTPAddress,
+		Handler:           newRateLimitHTTPHandler(limits),
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       30 * time.Second,
+	}
+	go func() {
+		slog.Info("rate limit metrics server started", "address", configuration.HTTPAddress)
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("rate limit metrics server stopped", "error", err)
+			stop()
+		}
+	}()
+	defer func() {
+		shutdownContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownContext); err != nil {
+			slog.Warn("rate limit metrics server shutdown failed", "error", err)
+		}
+	}()
 	slog.Info("agent usage source started",
 		"gateway", configuration.GatewayURL,
 		"workers", configuration.Workers,
 		"scan_interval", configuration.ScanInterval,
 		"backfill", configuration.Backfill,
+		"http_address", configuration.HTTPAddress,
 	)
 
 	runScan := func() {
@@ -99,6 +129,7 @@ func loadConfig() config {
 		StateDirectory:  envOrDefault("STATE_DIR", filepath.Join(stateRoot, "agent-usage-source")),
 		ScanInterval:    durationFromEnv("SCAN_INTERVAL", 2*time.Second),
 		HTTPTimeout:     durationFromEnv("HTTP_TIMEOUT", 5*time.Second),
+		HTTPAddress:     envOrDefault("HTTP_ADDR", ":9469"),
 		Workers:         positiveIntFromEnv("WORKERS", 8),
 		Backfill:        boolFromEnv("BACKFILL", true),
 	}

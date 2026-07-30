@@ -1,0 +1,29 @@
+groups:
+  - name: agent-rate-limits
+    rules:
+      - alert: AgentRateLimitWarning
+        expr: |
+          (
+            agent_rate_limit_used_ratio >= 0.80
+            and agent_rate_limit_used_ratio < 0.95
+          )
+          and on (provider, limit, bucket, window)
+          (agent_rate_limit_reset_timestamp_seconds > time())
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.provider }} {{ $labels.window }} limit is above 80%"
+          description: "The {{ $labels.limit }} {{ $labels.bucket }} limit has less than 20% remaining."
+
+      - alert: AgentRateLimitCritical
+        expr: |
+          (agent_rate_limit_used_ratio >= 0.95)
+          and on (provider, limit, bucket, window)
+          (agent_rate_limit_reset_timestamp_seconds > time())
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.provider }} {{ $labels.window }} limit is above 95%"
+          description: "The {{ $labels.limit }} {{ $labels.bucket }} limit is nearly exhausted."

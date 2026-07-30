@@ -27,6 +27,7 @@ type collector struct {
 	backfill bool
 	store    *stateStore
 	sender   *eventSender
+	limits   *rateLimitStore
 }
 
 type scanStats struct {
@@ -146,6 +147,14 @@ func (c *collector) processFile(ctx context.Context, file sourceFile, stats *sca
 		next.Offset += int64(len(line))
 
 		if shouldParse(file.Provider, line) {
+			if file.Provider == providerCodex && bytes.Contains(line, []byte(`"rate_limits"`)) && c.limits != nil {
+				samples, limitsErr := parseCodexRateLimits(line)
+				if limitsErr != nil {
+					slog.Debug("rate limit line ignored", "provider", file.Provider, "file", filepath.Base(file.Path), "offset", lineOffset, "error", limitsErr)
+				} else if err := c.limits.observe(samples...); err != nil {
+					return fmt.Errorf("persist rate limits: %w", err)
+				}
+			}
 			parsedCheckpoint, event, parseErr := parseUsageLine(file.Provider, file.Path, lineOffset, line, next)
 			if parseErr != nil {
 				slog.Debug("usage line ignored", "provider", file.Provider, "file", filepath.Base(file.Path), "offset", lineOffset, "error", parseErr)

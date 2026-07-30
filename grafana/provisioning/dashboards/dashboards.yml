@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: Agent usage
+    orgId: 1
+    folder: Agent usage
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards

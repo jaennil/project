@@ -6,6 +6,10 @@ counters, session metadata, and privacy-safe engineering activity counters. Prom
 text, model responses, tool arguments, tool output, images, commands, diffs, and
 complete file paths are never included in emitted events.
 
+It also exports current Codex and Claude Code account limits for Prometheus.
+Rate-limit snapshots are operational state and are not sent through Kafka. Only the
+provider, limit identifier, window, percentage, and timestamps are persisted.
+
 The Compose service mounts only these source directories as read-only:
 
 - `${HOME}/.codex/sessions`
@@ -89,6 +93,43 @@ The counters are derived as follows:
 | `WORKERS` | `8` | Number of session files processed concurrently |
 | `BACKFILL` | `true` | Send historical records on a fresh state volume |
 | `STATE_DIR` | `/var/lib/usage-source` | Checkpoints and sent event IDs |
+| `HTTP_ADDR` | `:9469` | Health, Claude ingest, and Prometheus listen address |
+
+## Account rate limits
+
+Codex rate limits are read from structured `token_count` transcript records. The
+available windows come from the service and must not be assumed to always be five
+hours. Claude Code does not write its account limits to transcripts, so its documented
+status-line JSON is forwarded to the local ingest endpoint.
+
+Configure this command in the global `~/.claude/settings.json`:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "/home/jaennil/dev/pet/project/usage-source/claude-rate-limits.sh",
+    "refreshInterval": 30
+  }
+}
+```
+
+The script sends only the `rate_limits` object to
+`http://127.0.0.1:9469/v1/rate-limits/claude` and also displays the five-hour and
+seven-day percentages in Claude Code. It requires `jq` and `curl` on the host. Set
+`AGENT_USAGE_SOURCE_URL` to override the endpoint.
+
+Prometheus scrapes these gauges from `/metrics`:
+
+- `agent_rate_limit_used_ratio`
+- `agent_rate_limit_reset_timestamp_seconds`
+- `agent_rate_limit_last_update_timestamp_seconds`
+- `agent_rate_limit_window_seconds`
+
+The Compose stack provisions the **Agent rate limits** Grafana dashboard and
+Prometheus warning/critical rules at 80% and 95%. The alerts automatically stop after
+the reported reset timestamp; connect Prometheus to an Alertmanager or configure a
+Grafana contact point to deliver notifications.
 
 Set `LOCAL_UID` and `LOCAL_GID` before building if the session files belong to a
 host user other than `1000:1000`.

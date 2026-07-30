@@ -78,6 +78,9 @@ services:
       - "${GRAFANA_PORT:-3002}:3000"
     volumes:
       - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
 
   prometheus:
     image: prom/prometheus:v3.13.1
@@ -86,6 +89,7 @@ services:
       - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus-data:/prometheus
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/ready"]
@@ -124,6 +128,9 @@ services:
       SCAN_INTERVAL: "${USAGE_SCAN_INTERVAL:-2s}"
       WORKERS: "${USAGE_WORKERS:-8}"
       BACKFILL: "${USAGE_BACKFILL:-true}"
+      HTTP_ADDR: :9469
+    ports:
+      - "127.0.0.1:${USAGE_SOURCE_PORT:-9469}:9469"
     volumes:
       - "${HOME}/.codex/sessions:/sessions/codex:ro"
       - "${HOME}/.claude/projects:/sessions/claude:ro"
