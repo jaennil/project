@@ -132,7 +132,6 @@
           "refId": "C"
         }
       ],
-      "timeFrom": "6h",
       "title": "Claude Code · 5-hour window",
       "type": "timeseries"
     },
@@ -261,7 +260,6 @@
           "refId": "C"
         }
       ],
-      "timeFrom": "6h",
       "title": "Codex · 5-hour window",
       "type": "timeseries"
     },
@@ -390,7 +388,6 @@
           "refId": "C"
         }
       ],
-      "timeFrom": "7d",
       "title": "Claude Code · 7-day window",
       "type": "timeseries"
     },
@@ -519,7 +516,6 @@
           "refId": "C"
         }
       ],
-      "timeFrom": "7d",
       "title": "Codex · 7-day window",
       "type": "timeseries"
     },
