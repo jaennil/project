@@ -99,8 +99,10 @@ The counters are derived as follows:
 
 Codex rate limits are read from structured `token_count` transcript records. The
 available windows come from the service and must not be assumed to always be five
-hours. Claude Code does not write its account limits to transcripts, so its documented
-status-line JSON is forwarded to the local ingest endpoint.
+hours. Claude Code does not write its account limits to transcripts, so the status-line
+helper reads the current account usage from Claude's OAuth usage endpoint. It caches a
+sanitized response for 30 seconds across all running Claude processes and uses fresh
+status-line data only as a fallback. Expired windows are ignored.
 
 Configure this command in the global `~/.claude/settings.json`:
 
@@ -114,10 +116,17 @@ Configure this command in the global `~/.claude/settings.json`:
 }
 ```
 
-The script sends only the `rate_limits` object to
-`http://127.0.0.1:9469/v1/rate-limits/claude` and also displays the five-hour and
-seven-day percentages in Claude Code. It requires `jq` and `curl` on the host. Set
-`AGENT_USAGE_SOURCE_URL` to override the endpoint.
+The script reads the access token from `~/.claude/.credentials.json`, but never writes
+the token to its cache, command arguments, `usage-source`, or Prometheus. It sends only
+the five-hour and seven-day percentages and reset timestamps to
+`http://127.0.0.1:9469/v1/rate-limits/claude`, and displays the percentages in Claude
+Code. It requires `curl`, `flock`, `jq`, and GNU `stat` on the host.
+
+Set `AGENT_USAGE_SOURCE_URL` to override the local ingest endpoint,
+`CLAUDE_CREDENTIALS_FILE` to override the credentials path,
+`CLAUDE_RATE_LIMIT_CACHE_SECONDS` to change the 30-second refresh interval,
+`CLAUDE_RATE_LIMIT_MAX_CACHE_AGE` to change the 120-second stale cutoff, or
+`CLAUDE_RATE_LIMIT_CACHE_DIR` to override the runtime cache directory.
 
 Prometheus scrapes these gauges from `/metrics`:
 

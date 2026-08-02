@@ -123,6 +123,58 @@ func TestClaudeRateLimitIngestIgnoresPrivateStatusFields(t *testing.T) {
 	}
 }
 
+func TestClaudeOAuthRateLimitIngest(t *testing.T) {
+	directory := t.TempDir()
+	store, err := openRateLimitStore(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observedAt := time.Date(2026, time.August, 2, 16, 0, 0, 0, time.UTC)
+	handler := &rateLimitHTTPHandler{
+		store: store,
+		now:   func() time.Time { return observedAt },
+	}
+	body := `{"five_hour":{"utilization":21.0,"resets_at":"2026-08-02T17:00:00.076843+00:00"},"seven_day":{"utilization":22.0,"resets_at":"2026-08-07T01:00:00.076870+00:00"}}`
+	request := httptest.NewRequest(http.MethodPost, "/v1/rate-limits/claude", strings.NewReader(body))
+	response := httptest.NewRecorder()
+	handler.claude(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("unexpected status: %d body=%s", response.Code, response.Body.String())
+	}
+	samples := store.snapshot()
+	if len(samples) != 2 {
+		t.Fatalf("expected two samples, got %+v", samples)
+	}
+	if samples[0].UsedRatio != 0.21 || samples[0].ResetsAt != 1785690000 {
+		t.Fatalf("unexpected five-hour sample: %+v", samples[0])
+	}
+	if samples[1].UsedRatio != 0.22 || samples[1].ResetsAt != 1786064400 {
+		t.Fatalf("unexpected seven-day sample: %+v", samples[1])
+	}
+}
+
+func TestClaudeRateLimitIngestIgnoresExpiredWindows(t *testing.T) {
+	store, err := openRateLimitStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := &rateLimitHTTPHandler{
+		store: store,
+		now:   func() time.Time { return time.Unix(300, 0) },
+	}
+	body := `{"rate_limits":{"five_hour":{"used_percentage":65,"resets_at":200},"seven_day":{"used_percentage":19,"resets_at":400}}}`
+	request := httptest.NewRequest(http.MethodPost, "/v1/rate-limits/claude", strings.NewReader(body))
+	response := httptest.NewRecorder()
+	handler.claude(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("unexpected status: %d body=%s", response.Code, response.Body.String())
+	}
+	samples := store.snapshot()
+	if len(samples) != 1 || samples[0].Bucket != "seven_day" {
+		t.Fatalf("unexpected samples: %+v", samples)
+	}
+}
+
 func TestRateLimitHTTPRoutes(t *testing.T) {
 	store, err := openRateLimitStore(t.TempDir())
 	if err != nil {

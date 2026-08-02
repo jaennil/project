@@ -296,15 +296,24 @@ func durationLabel(minutes int64) string {
 }
 
 type claudeStatusPayload struct {
-	RateLimits *struct {
-		FiveHour *claudeRateLimitWindow `json:"five_hour"`
-		SevenDay *claudeRateLimitWindow `json:"seven_day"`
-	} `json:"rate_limits"`
+	RateLimits *claudeStatusRateLimits     `json:"rate_limits"`
+	FiveHour   *claudeOAuthRateLimitWindow `json:"five_hour"`
+	SevenDay   *claudeOAuthRateLimitWindow `json:"seven_day"`
+}
+
+type claudeStatusRateLimits struct {
+	FiveHour *claudeRateLimitWindow `json:"five_hour"`
+	SevenDay *claudeRateLimitWindow `json:"seven_day"`
 }
 
 type claudeRateLimitWindow struct {
 	UsedPercentage *float64 `json:"used_percentage"`
 	ResetsAt       int64    `json:"resets_at"`
+}
+
+type claudeOAuthRateLimitWindow struct {
+	Utilization *float64 `json:"utilization"`
+	ResetsAt    string   `json:"resets_at"`
 }
 
 type rateLimitHTTPHandler struct {
@@ -358,7 +367,24 @@ func (h *rateLimitHTTPHandler) claude(response http.ResponseWriter, request *htt
 		http.Error(response, "invalid JSON", http.StatusBadRequest)
 		return
 	}
-	observedAt := h.now().UTC().Unix()
+	observedAt := h.now().UTC()
+	samples, err := parseClaudeRateLimits(payload, observedAt)
+	if err != nil {
+		http.Error(response, "invalid rate limit", http.StatusBadRequest)
+		return
+	}
+	if err := h.store.observe(samples...); err != nil {
+		http.Error(response, "invalid rate limit", http.StatusBadRequest)
+		return
+	}
+	response.WriteHeader(http.StatusNoContent)
+}
+
+func parseClaudeRateLimits(payload claudeStatusPayload, observedAt time.Time) ([]rateLimitSample, error) {
+	if payload.FiveHour != nil || payload.SevenDay != nil {
+		return parseClaudeOAuthRateLimits(payload, observedAt)
+	}
+
 	windows := []struct {
 		bucket  string
 		window  string
@@ -377,6 +403,9 @@ func (h *rateLimitHTTPHandler) claude(response http.ResponseWriter, request *htt
 		if item.value == nil || item.value.UsedPercentage == nil {
 			continue
 		}
+		if item.value.ResetsAt <= observedAt.Unix() {
+			continue
+		}
 		samples = append(samples, rateLimitSample{
 			Provider:      providerClaudeCode,
 			Limit:         "subscription",
@@ -385,14 +414,46 @@ func (h *rateLimitHTTPHandler) claude(response http.ResponseWriter, request *htt
 			WindowSeconds: item.seconds,
 			UsedRatio:     *item.value.UsedPercentage / 100,
 			ResetsAt:      item.value.ResetsAt,
-			ObservedAt:    observedAt,
+			ObservedAt:    observedAt.Unix(),
 		})
 	}
-	if err := h.store.observe(samples...); err != nil {
-		http.Error(response, "invalid rate limit", http.StatusBadRequest)
-		return
+	return samples, nil
+}
+
+func parseClaudeOAuthRateLimits(payload claudeStatusPayload, observedAt time.Time) ([]rateLimitSample, error) {
+	windows := []struct {
+		bucket  string
+		window  string
+		seconds int64
+		value   *claudeOAuthRateLimitWindow
+	}{
+		{bucket: "five_hour", window: "5h", seconds: 5 * 60 * 60, value: payload.FiveHour},
+		{bucket: "seven_day", window: "7d", seconds: 7 * 24 * 60 * 60, value: payload.SevenDay},
 	}
-	response.WriteHeader(http.StatusNoContent)
+	var samples []rateLimitSample
+	for _, item := range windows {
+		if item.value == nil || item.value.Utilization == nil {
+			continue
+		}
+		resetsAt, err := time.Parse(time.RFC3339Nano, item.value.ResetsAt)
+		if err != nil {
+			return nil, fmt.Errorf("invalid Claude %s reset timestamp: %w", item.bucket, err)
+		}
+		if !resetsAt.After(observedAt) {
+			continue
+		}
+		samples = append(samples, rateLimitSample{
+			Provider:      providerClaudeCode,
+			Limit:         "subscription",
+			Bucket:        item.bucket,
+			Window:        item.window,
+			WindowSeconds: item.seconds,
+			UsedRatio:     *item.value.Utilization / 100,
+			ResetsAt:      resetsAt.Unix(),
+			ObservedAt:    observedAt.Unix(),
+		})
+	}
+	return samples, nil
 }
 
 func ensureJSONEnd(decoder *json.Decoder) error {
