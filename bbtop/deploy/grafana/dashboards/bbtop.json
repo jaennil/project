@@ -98,6 +98,16 @@
       "title": "Top process memory",
       "transformations": [{"id": "organize", "options": {"excludeByName": {"Time": true, "__name__": true, "instance": true, "job": true, "state": true}, "renameByName": {"Value": "RSS", "name": "Process", "pid": "PID"}}}],
       "type": "table"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "RPM reported by Linux hwmon. No data means the firmware or kernel driver does not expose a fan sensor.",
+      "fieldConfig": {"defaults": {"min": 0, "unit": "rpm"}},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 30},
+      "id": 11,
+      "targets": [{"expr": "bbtop_fan_speed_rpm", "legendFormat": "{{chip}} · {{sensor}}", "refId": "A"}],
+      "title": "Fan speed",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",

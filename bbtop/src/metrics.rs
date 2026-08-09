@@ -91,6 +91,26 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
         "gauge",
         snapshot.timestamp,
     );
+    metric(
+        &mut output,
+        "bbtop_fans_detected",
+        "gauge",
+        snapshot.fans.len(),
+    );
+    let _ = writeln!(
+        output,
+        "# HELP bbtop_fan_speed_rpm Fan speed reported by Linux hwmon"
+    );
+    let _ = writeln!(output, "# TYPE bbtop_fan_speed_rpm gauge");
+    for fan in &snapshot.fans {
+        let _ = writeln!(
+            output,
+            "bbtop_fan_speed_rpm{{chip=\"{}\",sensor=\"{}\"}} {}",
+            escape_label(&fan.chip),
+            escape_label(&fan.sensor),
+            fan.rpm
+        );
+    }
     let _ = writeln!(output, "# HELP bbtop_info Host identity");
     let _ = writeln!(output, "# TYPE bbtop_info gauge");
     let _ = writeln!(

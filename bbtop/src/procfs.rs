@@ -19,6 +19,13 @@ pub struct Process {
 }
 
 #[derive(Clone, Debug, Default)]
+pub struct Fan {
+    pub chip: String,
+    pub sensor: String,
+    pub rpm: u64,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct Snapshot {
     pub timestamp: u64,
     pub hostname: String,
@@ -37,6 +44,7 @@ pub struct Snapshot {
     pub processes_total: usize,
     pub processes_running: usize,
     pub processes: Vec<Process>,
+    pub fans: Vec<Fan>,
 }
 
 impl Snapshot {
@@ -106,6 +114,7 @@ impl Collector {
             &fs::read_to_string(self.root.join("diskstats"))?,
             &self.sys_root,
         );
+        let fans = read_fans(&self.sys_root);
 
         let mut next_process_cpu = HashMap::new();
         let mut processes = Vec::new();
@@ -166,8 +175,55 @@ impl Collector {
                 .filter(|process| process.state == 'R')
                 .count(),
             processes,
+            fans,
         })
     }
+}
+
+fn read_fans(sys_root: &Path) -> Vec<Fan> {
+    let mut fans = Vec::new();
+    let Ok(chips) = fs::read_dir(sys_root.join("class/hwmon")) else {
+        return fans;
+    };
+    for chip in chips.flatten() {
+        let path = chip.path();
+        let chip_name = fs::read_to_string(path.join("name"))
+            .unwrap_or_else(|_| chip.file_name().to_string_lossy().into_owned())
+            .trim()
+            .to_owned();
+        let Ok(entries) = fs::read_dir(&path) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let file_name = entry.file_name().to_string_lossy().into_owned();
+            let Some(default_sensor) = fan_sensor_name(&file_name) else {
+                continue;
+            };
+            let Ok(rpm) = fs::read_to_string(entry.path()) else {
+                continue;
+            };
+            let Ok(rpm) = rpm.trim().parse::<u64>() else {
+                continue;
+            };
+            let sensor = fs::read_to_string(path.join(format!("{default_sensor}_label")))
+                .unwrap_or(default_sensor)
+                .trim()
+                .to_owned();
+            fans.push(Fan {
+                chip: chip_name.clone(),
+                sensor,
+                rpm,
+            });
+        }
+    }
+    fans.sort_unstable_by(|a, b| (&a.chip, &a.sensor).cmp(&(&b.chip, &b.sensor)));
+    fans
+}
+
+fn fan_sensor_name(file_name: &str) -> Option<String> {
+    let number = file_name.strip_prefix("fan")?.strip_suffix("_input")?;
+    (!number.is_empty() && number.chars().all(|character| character.is_ascii_digit()))
+        .then(|| format!("fan{number}"))
 }
 
 fn parse_cpu_times(input: &str) -> io::Result<(CpuTimes, usize)> {
@@ -336,5 +392,12 @@ mod tests {
     fn parses_network_totals() {
         let input = "Inter-| Receive | Transmit\n eth0: 10 0 0 0 0 0 0 0 20 0 0 0 0 0 0 0\n";
         assert_eq!(parse_net_dev(input), (10, 20));
+    }
+
+    #[test]
+    fn recognizes_fan_input_names() {
+        assert_eq!(fan_sensor_name("fan12_input").as_deref(), Some("fan12"));
+        assert_eq!(fan_sensor_name("fan1_min"), None);
+        assert_eq!(fan_sensor_name("temp1_input"), None);
     }
 }

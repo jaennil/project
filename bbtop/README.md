@@ -46,6 +46,7 @@ by default.
 - aggregate CPU, logical CPUs, load averages and uptime;
 - total, available and swap memory;
 - network and block-device byte counters;
+- fan speed in RPM when exposed through Linux `hwmon`;
 - task counts and state;
 - bounded per-process CPU, RSS, virtual memory, threads and I/O counters;
 - collection timestamp and host identity.
