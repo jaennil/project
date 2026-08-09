@@ -190,6 +190,6 @@ static void __exit honor_fmi_exit(void)
 module_init(honor_fmi_init);
 module_exit(honor_fmi_exit);
 
-MODULE_AUTHOR("jaennil <jaennil@yandex.ru>");
+MODULE_AUTHOR("Nikita Dubrovskih <jaennil@yandex.ru>");
 MODULE_DESCRIPTION("HONOR FMI-XX fan speed monitor");
 MODULE_LICENSE("GPL");
