@@ -72,11 +72,12 @@
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "Bps"}},
+      "fieldConfig": {"defaults": {"max": 3500000000, "min": 0, "unit": "Bps", "custom": {"thresholdsStyle": {"mode": "line"}}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 2450000000}, {"color": "red", "value": 3150000000}]}}},
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13},
       "id": 8,
       "targets": [{"expr": "rate(bbtop_disk_read_bytes_total[$__rate_interval])", "legendFormat": "read", "refId": "A"}, {"expr": "rate(bbtop_disk_write_bytes_total[$__rate_interval])", "legendFormat": "write", "refId": "B"}],
-      "title": "Disk throughput",
+      "description": "Current PCIe 3.0 x4 link ceiling is approximately 3.5 GB/s. Thresholds: 70% and 90%.",
+      "title": "Disk throughput · max ≈ 3.5 GB/s",
       "type": "timeseries"
     },
     {
@@ -109,4 +110,3 @@
   "uid": "bbtop-linux",
   "version": 1
 }
-
