@@ -60,3 +60,6 @@ storing a second copy of history in the agent.
 This initial version is Linux-only. It observes tasks but does not send signals
 or change process priority; those controls should be added behind explicit
 confirmation and permission checks.
+
+An experimental read-only hwmon driver for the HONOR FMI-XX is available under
+[`contrib/honor-fmi-hwmon`](contrib/honor-fmi-hwmon/README.md).

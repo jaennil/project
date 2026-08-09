@@ -1,3 +1,11 @@
 /target
 *.swp
 
+# Out-of-tree kernel module artifacts
+*.ko
+*.mod
+*.mod.c
+*.o
+.*.cmd
+Module.symvers
+modules.order
