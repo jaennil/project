@@ -34,7 +34,7 @@ docker compose up --build -d
 
 Open <http://localhost:3000> and sign in with `admin` / `bbtop`. The provisioned
 dashboard is in the **bbtop** folder. Prometheus is available at
-<http://localhost:9090>; samples are retained for 30 days by default.
+<http://localhost:9091>; samples are retained for 30 days by default.
 
 The container uses the host PID namespace and mounts host `/proc` and `/sys`
 read-only so the dashboard describes the host rather than the container. Review

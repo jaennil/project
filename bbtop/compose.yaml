@@ -21,7 +21,7 @@ services:
     depends_on:
       - bbtop
     ports:
-      - "127.0.0.1:9090:9090"
+      - "127.0.0.1:9091:9090"
     restart: unless-stopped
     volumes:
       - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
