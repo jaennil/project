@@ -17,6 +17,11 @@ The module has an exact DMI match for:
 - product name: `FMI-XX`
 - tested firmware: `1.09`, dated `2025-01-14`
 
+Runtime validation on Linux `6.12.101-1-MANJARO` confirmed approximately
+2500–2800 RPM on channel 0. Channel 1 was readable but remained at 0 RPM during
+idle and a short CPU load, so it may be an unused firmware channel or a stopped
+second fan.
+
 Do not broaden the DMI match until the same ACPI contract is confirmed on another
 model.
 
@@ -41,10 +46,31 @@ sudo rmmod honor_fmi_hwmon
 Before loading, check that `uname -r` matches the headers used for the build.
 The module is intentionally not installed persistently while it is experimental.
 
+## Optional DKMS installation
+
+After validating the temporary module, install the source for automatic rebuilds
+on kernel updates:
+
+```bash
+sudo install -d /usr/src/honor-fmi-hwmon-0.1.0
+sudo install -m 644 Makefile dkms.conf honor-fmi-hwmon.c \
+  /usr/src/honor-fmi-hwmon-0.1.0/
+sudo dkms add honor-fmi-hwmon/0.1.0
+sudo dkms install honor-fmi-hwmon/0.1.0
+echo honor_fmi_hwmon | sudo tee /etc/modules-load.d/honor-fmi-hwmon.conf
+```
+
+Remove it completely with:
+
+```bash
+sudo rm -f /etc/modules-load.d/honor-fmi-hwmon.conf
+sudo dkms remove honor-fmi-hwmon/0.1.0 --all
+sudo rm -rf /usr/src/honor-fmi-hwmon-0.1.0
+```
+
 ## Upstream direction
 
 Before submission, confirm both channels at idle and under automatic fan ramp,
 test repeated reads and suspend/resume, and ask the platform-x86 and hwmon
 maintainers whether this belongs in `drivers/hwmon/` or under
 `drivers/platform/x86/`. The first patch should remain monitoring-only.
-
