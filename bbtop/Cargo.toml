@@ -1,0 +1,12 @@
+[package]
+name = "bbtop"
+version = "0.1.0"
+edition = "2024"
+description = "A Linux task monitor with a Prometheus exporter"
+license = "MIT"
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
+

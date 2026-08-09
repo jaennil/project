@@ -1,0 +1,112 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}},
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}},
+      "targets": [{"expr": "bbtop_cpu_usage_percent", "legendFormat": "CPU", "refId": "A"}],
+      "title": "CPU usage",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}},
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+      "id": 2,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}},
+      "targets": [{"expr": "100 * (1 - bbtop_memory_available_bytes / bbtop_memory_total_bytes)", "legendFormat": "Memory", "refId": "A"}],
+      "title": "Memory usage",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
+      "id": 3,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}},
+      "targets": [{"expr": "bbtop_processes", "legendFormat": "all", "refId": "A"}, {"expr": "bbtop_processes_running", "legendFormat": "running", "refId": "B"}],
+      "title": "Processes",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0},
+      "id": 4,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}},
+      "targets": [{"expr": "bbtop_uptime_seconds", "legendFormat": "uptime", "refId": "A"}],
+      "title": "Uptime",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percent"}},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+      "id": 5,
+      "targets": [{"expr": "bbtop_cpu_usage_percent", "legendFormat": "CPU", "refId": "A"}],
+      "title": "CPU history",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
+      "id": 6,
+      "targets": [{"expr": "bbtop_memory_total_bytes - bbtop_memory_available_bytes", "legendFormat": "used", "refId": "A"}, {"expr": "bbtop_memory_available_bytes", "legendFormat": "available", "refId": "B"}],
+      "title": "Memory history",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "Bps"}},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13},
+      "id": 7,
+      "targets": [{"expr": "rate(bbtop_network_receive_bytes_total[$__rate_interval])", "legendFormat": "receive", "refId": "A"}, {"expr": "rate(bbtop_network_transmit_bytes_total[$__rate_interval])", "legendFormat": "transmit", "refId": "B"}],
+      "title": "Network throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "Bps"}},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13},
+      "id": 8,
+      "targets": [{"expr": "rate(bbtop_disk_read_bytes_total[$__rate_interval])", "legendFormat": "read", "refId": "A"}, {"expr": "rate(bbtop_disk_write_bytes_total[$__rate_interval])", "legendFormat": "write", "refId": "B"}],
+      "title": "Disk throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percent"}},
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 21},
+      "id": 9,
+      "targets": [{"expr": "topk(10, bbtop_process_cpu_usage_percent)", "legendFormat": "{{name}} ({{pid}})", "refId": "A"}],
+      "title": "Top process CPU",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}},
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 21},
+      "id": 10,
+      "targets": [{"expr": "topk(10, bbtop_process_resident_memory_bytes)", "format": "table", "instant": true, "legendFormat": "{{name}} ({{pid}})", "refId": "A"}],
+      "title": "Top process memory",
+      "transformations": [{"id": "organize", "options": {"excludeByName": {"Time": true, "__name__": true, "instance": true, "job": true, "state": true}, "renameByName": {"Value": "RSS", "name": "Process", "pid": "PID"}}}],
+      "type": "table"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 42,
+  "tags": ["linux", "observability", "bbtop"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timezone": "browser",
+  "title": "bbtop Linux overview",
+  "uid": "bbtop-linux",
+  "version": 1
+}
+
