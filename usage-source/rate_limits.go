@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	rateLimitsStateFile  = "rate-limits.json"
-	maxStatusPayloadSize = 64 << 10
+	rateLimitsStateFile                  = "rate-limits.json"
+	maxStatusPayloadSize                 = 64 << 10
+	claudeResetTimestampToleranceSeconds = 60
 )
 
 type rateLimitSample struct {
@@ -112,10 +113,13 @@ func (s *rateLimitStore) observe(samples ...rateLimitSample) error {
 
 func shouldReplaceRateLimit(current, candidate rateLimitSample) bool {
 	if candidate.Provider == providerClaudeCode {
-		if candidate.ResetsAt < current.ResetsAt {
+		resetDelta := candidate.ResetsAt - current.ResetsAt
+		sameResetWindow := resetDelta >= -claudeResetTimestampToleranceSeconds &&
+			resetDelta <= claudeResetTimestampToleranceSeconds
+		if resetDelta < -claudeResetTimestampToleranceSeconds {
 			return false
 		}
-		if candidate.ResetsAt == current.ResetsAt && candidate.UsedRatio < current.UsedRatio {
+		if sameResetWindow && candidate.UsedRatio < current.UsedRatio {
 			return false
 		}
 	}

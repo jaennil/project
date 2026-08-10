@@ -93,6 +93,42 @@ func TestClaudeRateLimitDoesNotRegressWithinResetWindow(t *testing.T) {
 	}
 }
 
+func TestClaudeRateLimitAcceptsResetTimestampJitter(t *testing.T) {
+	store, err := openRateLimitStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := testRateLimitSample(55, 100)
+	current.Provider = providerClaudeCode
+	current.Limit = "subscription"
+	current.ResetsAt = 1000
+	if err := store.observe(current); err != nil {
+		t.Fatal(err)
+	}
+
+	jittered := current
+	jittered.UsedRatio = 0.7
+	jittered.ResetsAt--
+	jittered.ObservedAt = 200
+	if err := store.observe(jittered); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.snapshot()[0]; got != jittered {
+		t.Fatalf("reset timestamp jitter blocked update: %+v", got)
+	}
+
+	oldWindow := jittered
+	oldWindow.UsedRatio = 0.9
+	oldWindow.ResetsAt -= claudeResetTimestampToleranceSeconds + 1
+	oldWindow.ObservedAt = 300
+	if err := store.observe(oldWindow); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.snapshot()[0]; got != jittered {
+		t.Fatalf("old reset window replaced current limit: %+v", got)
+	}
+}
+
 func TestClaudeRateLimitIngestIgnoresPrivateStatusFields(t *testing.T) {
 	directory := t.TempDir()
 	store, err := openRateLimitStore(directory)
