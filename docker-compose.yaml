@@ -96,11 +96,19 @@ services:
     restart: unless-stopped
     user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     network_mode: host
+    entrypoint: ["/bin/sh", "/usr/local/bin/tuna-watchdog.sh"]
     depends_on:
       prometheus:
         condition: service_healthy
+    environment:
+      TUNA_WATCHDOG_URL: >-
+        https://project-ai-usage.ru.tuna.am/api/v1/status/buildinfo
+      TUNA_WATCHDOG_INTERVAL: "${TUNA_WATCHDOG_INTERVAL:-60}"
+      TUNA_WATCHDOG_FAILURE_THRESHOLD: >-
+        ${TUNA_WATCHDOG_FAILURE_THRESHOLD:-3}
     volumes:
       - "${HOME}/.config/tuna/tuna.yml:/etc/tuna.yml:ro"
+      - "./tuna/watchdog.sh:/usr/local/bin/tuna-watchdog.sh:ro"
     command:
       - --config=/etc/tuna.yml
       - --log=stdout
