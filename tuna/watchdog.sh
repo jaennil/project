@@ -34,8 +34,11 @@ check_tunnel() {
         *" 200 "*|*" 401 "*|*" 403 "*)
             return 0
             ;;
-        *)
+        *" 404 "*)
             return 1
+            ;;
+        *)
+            return 2
             ;;
     esac
 }
@@ -51,22 +54,31 @@ while true; do
     sleep "$STARTUP_GRACE"
 
     while kill -0 "$tuna_pid" 2>/dev/null; do
-        if check_tunnel; then
-            if [ "$failures" -gt 0 ]; then
-                printf '%s\n' "tuna watchdog: tunnel recovered"
-            fi
-            failures=0
-        else
-            failures=$((failures + 1))
-            printf '%s\n' \
-                "tuna watchdog: check failed ($failures/$FAILURE_THRESHOLD)"
+        check_tunnel
+        check_result=$?
+        case "$check_result" in
+            0)
+                if [ "$failures" -gt 0 ]; then
+                    printf '%s\n' "tuna watchdog: tunnel recovered"
+                fi
+                failures=0
+                ;;
+            1)
+                failures=$((failures + 1))
+                printf '%s\n' \
+                    "tuna watchdog: tunnel missing ($failures/$FAILURE_THRESHOLD)"
 
-            if [ "$failures" -ge "$FAILURE_THRESHOLD" ]; then
-                printf '%s\n' "tuna watchdog: restarting Tuna"
-                stop_tuna
-                break
-            fi
-        fi
+                if [ "$failures" -ge "$FAILURE_THRESHOLD" ]; then
+                    printf '%s\n' "tuna watchdog: restarting Tuna"
+                    stop_tuna
+                    break
+                fi
+                ;;
+            *)
+                failures=0
+                printf '%s\n' "tuna watchdog: check inconclusive"
+                ;;
+        esac
 
         sleep "$CHECK_INTERVAL"
     done
