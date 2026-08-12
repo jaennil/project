@@ -9,3 +9,6 @@
 .*.cmd
 Module.symvers
 modules.order
+
+# Local SMTP credentials
+git-send-mail-google-password

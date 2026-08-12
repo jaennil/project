@@ -1,5 +1,5 @@
-From 01eb9f73bb5717ad51dfefa041c90a4368d1a6b2 Mon Sep 17 00:00:00 2001
-From: Nikita Dubrovskih <jaennil@yandex.ru>
+From 334d007a618f77460c324e0056531b1ca1a35a5e Mon Sep 17 00:00:00 2001
+From: Nikita Dubrovskih <testname142@gmail.com>
 Date: Sun, 9 Aug 2026 21:17:10 +0300
 Subject: [RFC PATCH] hwmon: Add fan monitoring support for HONOR FMI-XX
 
@@ -15,7 +15,7 @@ The interface was validated on firmware 1.09 with fan channel 0
 reporting approximately 2500-2800 RPM. Channel 1 is readable and
 remained at 0 RPM during idle and a short CPU load.
 
-Signed-off-by: Nikita Dubrovskih <jaennil@yandex.ru>
+Signed-off-by: Nikita Dubrovskih <testname142@gmail.com>
 ---
  Documentation/hwmon/honor-fmi.rst |  32 +++++
  Documentation/hwmon/index.rst     |   1 +
@@ -29,7 +29,7 @@ Signed-off-by: Nikita Dubrovskih <jaennil@yandex.ru>
 
 diff --git a/Documentation/hwmon/honor-fmi.rst b/Documentation/hwmon/honor-fmi.rst
 new file mode 100644
-index 0000000..0e0492d
+index 0000000..a42a1dd
 --- /dev/null
 +++ b/Documentation/hwmon/honor-fmi.rst
 @@ -0,0 +1,32 @@
@@ -42,7 +42,7 @@ index 0000000..0e0492d
 +
 +  * HONOR FMI-XX
 +
-+Author: Nikita Dubrovskih <jaennil@yandex.ru>
++Author: Nikita Dubrovskih <testname142@gmail.com>
 +
 +Description
 +-----------
@@ -78,7 +78,7 @@ index 29130df..91052fa 100644
     hs3001
     htu31
 diff --git a/MAINTAINERS b/MAINTAINERS
-index 8014b9f..678fd74 100644
+index 8014b9f..d7355db 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
 @@ -11854,6 +11854,13 @@ F:	lib/test_hmm*
@@ -86,7 +86,7 @@ index 8014b9f..678fd74 100644
  F:	tools/testing/selftests/mm/*hmm*
  
 +HONOR FMI-XX HARDWARE MONITOR DRIVER
-+M:	Nikita Dubrovskih <jaennil@yandex.ru>
++M:	Nikita Dubrovskih <testname142@gmail.com>
 +L:	linux-hwmon@vger.kernel.org
 +S:	Maintained
 +F:	Documentation/hwmon/honor-fmi.rst
@@ -130,7 +130,7 @@ index 63effc0..e098793 100644
  # Native drivers
 diff --git a/drivers/hwmon/honor-fmi.c b/drivers/hwmon/honor-fmi.c
 new file mode 100644
-index 0000000..f2214c7
+index 0000000..225066e
 --- /dev/null
 +++ b/drivers/hwmon/honor-fmi.c
 @@ -0,0 +1,195 @@
@@ -326,9 +326,8 @@ index 0000000..f2214c7
 +module_init(honor_fmi_init);
 +module_exit(honor_fmi_exit);
 +
-+MODULE_AUTHOR("Nikita Dubrovskih <jaennil@yandex.ru>");
++MODULE_AUTHOR("Nikita Dubrovskih <testname142@gmail.com>");
 +MODULE_DESCRIPTION("HONOR FMI-XX fan speed monitor");
 +MODULE_LICENSE("GPL");
 -- 
 2.55.0
-
