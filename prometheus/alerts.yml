@@ -43,3 +43,24 @@ groups:
         annotations:
           summary: "{{ $labels.provider }} {{ $labels.window }} limit is above 95%"
           description: "The {{ $labels.limit }} {{ $labels.bucket }} limit is nearly exhausted."
+
+  - name: event-pipeline
+    rules:
+      - alert: GatewayKafkaDeliveryError
+        expr: increase(gateway_errors_total[5m]) > 0
+        labels:
+          severity: critical
+          service: gateway
+        annotations:
+          summary: "Gateway failed to deliver an event to Kafka"
+          description: "The gateway observed at least one Kafka enqueue or delivery error during the last five minutes."
+
+      - alert: EventPipelineTargetDown
+        expr: up{job=~"gateway|usage-source"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: "{{ $labels.job }}"
+        annotations:
+          summary: "{{ $labels.job }} is unavailable"
+          description: "Prometheus has been unable to scrape {{ $labels.job }} for more than one minute."

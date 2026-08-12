@@ -38,3 +38,37 @@ tests:
             exp_annotations:
               summary: "claude_code 5h usage is ahead of budget"
               description: "Usage is above the linear budget for the current provider-defined reset window."
+
+  - interval: 1m
+    input_series:
+      - series: 'gateway_errors_total{instance="gateway:1234",job="gateway"}'
+        values: '0 0 0 1 1'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: GatewayKafkaDeliveryError
+        exp_alerts:
+          - exp_labels:
+              instance: gateway:1234
+              job: gateway
+              severity: critical
+              service: gateway
+            exp_annotations:
+              summary: "Gateway failed to deliver an event to Kafka"
+              description: "The gateway observed at least one Kafka enqueue or delivery error during the last five minutes."
+
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="usage-source:9469",job="usage-source"}'
+        values: '1 0 0 0'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: EventPipelineTargetDown
+        exp_alerts:
+          - exp_labels:
+              instance: usage-source:9469
+              job: usage-source
+              severity: critical
+              service: usage-source
+            exp_annotations:
+              summary: "usage-source is unavailable"
+              description: "Prometheus has been unable to scrape usage-source for more than one minute."
