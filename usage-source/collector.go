@@ -14,6 +14,12 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
+)
+
+const (
+	maxRateLimitFiles     = 16
+	rateLimitRecoveryTail = 1 << 20
 )
 
 type sourceDirectory struct {
@@ -22,12 +28,13 @@ type sourceDirectory struct {
 }
 
 type collector struct {
-	sources  []sourceDirectory
-	workers  int
-	backfill bool
-	store    *stateStore
-	sender   *eventSender
-	limits   *rateLimitStore
+	sources      []sourceDirectory
+	workers      int
+	backfill     bool
+	store        *stateStore
+	sender       *eventSender
+	limits       *rateLimitStore
+	limitOffsets map[string]int64
 }
 
 type scanStats struct {
@@ -40,6 +47,7 @@ type scanStats struct {
 func (c *collector) scan(ctx context.Context) *scanStats {
 	stats := &scanStats{}
 	files := c.discoverFiles()
+	c.scanLatestCodexRateLimits(files)
 	jobs := make(chan sourceFile)
 	var workers sync.WaitGroup
 	for range c.workers {
@@ -67,6 +75,93 @@ func (c *collector) scan(ctx context.Context) *scanStats {
 	close(jobs)
 	workers.Wait()
 	return stats
+}
+
+type recentCodexFile struct {
+	path     string
+	size     int64
+	modified time.Time
+}
+
+// scanLatestCodexRateLimits keeps account-limit telemetry independent from
+// event delivery. A slow gateway must not prevent fresh Codex limits from
+// reaching Prometheus.
+func (c *collector) scanLatestCodexRateLimits(files []sourceFile) {
+	if c.limits == nil {
+		return
+	}
+	if c.limitOffsets == nil {
+		c.limitOffsets = make(map[string]int64)
+	}
+
+	recent := make([]recentCodexFile, 0, maxRateLimitFiles)
+	for _, file := range files {
+		if file.Provider != providerCodex {
+			continue
+		}
+		info, err := os.Stat(file.Path)
+		if err != nil {
+			continue
+		}
+		recent = append(recent, recentCodexFile{path: file.Path, size: info.Size(), modified: info.ModTime()})
+	}
+	sort.Slice(recent, func(i, j int) bool { return recent[i].modified.After(recent[j].modified) })
+	if len(recent) > maxRateLimitFiles {
+		recent = recent[:maxRateLimitFiles]
+	}
+
+	for _, file := range recent {
+		if err := c.scanCodexRateLimitFile(file); err != nil {
+			slog.Warn("Codex rate limit scan failed", "file", filepath.Base(file.path), "error", err)
+		}
+	}
+}
+
+func (c *collector) scanCodexRateLimitFile(file recentCodexFile) error {
+	offset, tracked := c.limitOffsets[file.path]
+	if !tracked || offset > file.size {
+		offset = max(file.size-rateLimitRecoveryTail, 0)
+	}
+	opened, err := os.Open(file.path)
+	if err != nil {
+		return err
+	}
+	defer opened.Close()
+	if _, err := opened.Seek(offset, io.SeekStart); err != nil {
+		return err
+	}
+
+	reader := bufio.NewReaderSize(opened, 64*1024)
+	if !tracked && offset > 0 {
+		discarded, err := reader.ReadBytes('\n')
+		offset += int64(len(discarded))
+		if err != nil {
+			c.limitOffsets[file.path] = offset
+			return nil
+		}
+	}
+	for {
+		line, readErr := reader.ReadBytes('\n')
+		if errors.Is(readErr, io.EOF) {
+			break
+		}
+		if readErr != nil {
+			return readErr
+		}
+		offset += int64(len(line))
+		if !bytes.Contains(line, []byte(`"rate_limits"`)) {
+			continue
+		}
+		samples, parseErr := parseCodexRateLimits(line)
+		if parseErr != nil {
+			continue
+		}
+		if err := c.limits.observe(samples...); err != nil {
+			return err
+		}
+	}
+	c.limitOffsets[file.path] = offset
+	return nil
 }
 
 type sourceFile struct {

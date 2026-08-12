@@ -72,3 +72,24 @@ func TestCollectorSendsEachEventOnce(t *testing.T) {
 		t.Fatalf("unexpected received events: %+v", received)
 	}
 }
+
+func TestCollectorScansCodexLimitsIndependently(t *testing.T) {
+	sessionsDirectory := t.TempDir()
+	sessionPath := filepath.Join(sessionsDirectory, "session.jsonl")
+	line := `{"timestamp":"2026-08-12T18:00:00Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"limit_id":"codex","primary":{"used_percent":2,"window_minutes":10080,"resets_at":1787161916}}}}` + "\n"
+	if err := os.WriteFile(sessionPath, []byte(line), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	limits, err := openRateLimitStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	usageCollector := &collector{limits: limits}
+	usageCollector.scanLatestCodexRateLimits([]sourceFile{{Provider: providerCodex, Path: sessionPath}})
+
+	samples := limits.snapshot()
+	if len(samples) != 1 || samples[0].Window != "7d" || samples[0].UsedRatio != 0.02 {
+		t.Fatalf("unexpected rate limit samples: %+v", samples)
+	}
+}
