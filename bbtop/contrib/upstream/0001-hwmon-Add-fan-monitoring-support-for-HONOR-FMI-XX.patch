@@ -1,7 +1,9 @@
-From 334d007a618f77460c324e0056531b1ca1a35a5e Mon Sep 17 00:00:00 2001
+From 5aaaa021f6c8b91e447ed9f693563940dcf58f8e Mon Sep 17 00:00:00 2001
+In-Reply-To: <20260812192242.859307-1-testname142@gmail.com>
+References: <20260812192242.859307-1-testname142@gmail.com>
 From: Nikita Dubrovskih <testname142@gmail.com>
 Date: Sun, 9 Aug 2026 21:17:10 +0300
-Subject: [RFC PATCH] hwmon: Add fan monitoring support for HONOR FMI-XX
+Subject: [RFC PATCH v2] hwmon: Add fan monitoring support for HONOR FMI-XX
 
 The HONOR FMI-XX firmware exposes a serialized \\GFNS ACPI method.
 It returns a status byte and a 16-bit fan speed in RPM for either of two
@@ -17,13 +19,18 @@ remained at 0 RPM during idle and a short CPU load.
 
 Signed-off-by: Nikita Dubrovskih <testname142@gmail.com>
 ---
- Documentation/hwmon/honor-fmi.rst |  32 +++++
+Changes in v2:
+- Drop the redundant mutex and callback argument validation.
+- Remove unused platform drvdata and simplify the init error path.
+- Align the macro definition and order the MAINTAINERS entry.
+
+ Documentation/hwmon/honor-fmi.rst |  32 ++++++
  Documentation/hwmon/index.rst     |   1 +
  MAINTAINERS                       |   7 ++
  drivers/hwmon/Kconfig             |  10 ++
  drivers/hwmon/Makefile            |   1 +
- drivers/hwmon/honor-fmi.c         | 195 ++++++++++++++++++++++++++++++
- 6 files changed, 246 insertions(+)
+ drivers/hwmon/honor-fmi.c         | 178 ++++++++++++++++++++++++++++++
+ 6 files changed, 229 insertions(+)
  create mode 100644 Documentation/hwmon/honor-fmi.rst
  create mode 100644 drivers/hwmon/honor-fmi.c
 
@@ -78,12 +85,12 @@ index 29130df..91052fa 100644
     hs3001
     htu31
 diff --git a/MAINTAINERS b/MAINTAINERS
-index 8014b9f..d7355db 100644
+index 8014b9f..7f2e3f8 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
-@@ -11854,6 +11854,13 @@ F:	lib/test_hmm*
- F:	mm/hmm*
- F:	tools/testing/selftests/mm/*hmm*
+@@ -11876,6 +11876,13 @@ S:	Maintained
+ F:	Documentation/devicetree/bindings/iio/pressure/honeywell,mprls0025pa.yaml
+ F:	drivers/iio/pressure/mprls0025pa*
  
 +HONOR FMI-XX HARDWARE MONITOR DRIVER
 +M:	Nikita Dubrovskih <testname142@gmail.com>
@@ -92,9 +99,9 @@ index 8014b9f..d7355db 100644
 +F:	Documentation/hwmon/honor-fmi.rst
 +F:	drivers/hwmon/honor-fmi.c
 +
- HONEYWELL ABP2030PA PRESSURE SENSOR SERIES IIO DRIVER
- M:	Petre Rodan <petre.rodan@subdimension.ro>
- L:	linux-iio@vger.kernel.org
+ HP BIOSCFG DRIVER
+ M:	Jorge Lopez <jorge.lopez2@hp.com>
+ L:	platform-driver-x86@vger.kernel.org
 diff --git a/drivers/hwmon/Kconfig b/drivers/hwmon/Kconfig
 index 2bfbcc0..8a11a30 100644
 --- a/drivers/hwmon/Kconfig
@@ -130,10 +137,10 @@ index 63effc0..e098793 100644
  # Native drivers
 diff --git a/drivers/hwmon/honor-fmi.c b/drivers/hwmon/honor-fmi.c
 new file mode 100644
-index 0000000..225066e
+index 0000000..3421e40
 --- /dev/null
 +++ b/drivers/hwmon/honor-fmi.c
-@@ -0,0 +1,195 @@
+@@ -0,0 +1,178 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Read-only fan monitoring for the HONOR FMI-XX.
@@ -150,16 +157,12 @@ index 0000000..225066e
 +#include <linux/err.h>
 +#include <linux/hwmon.h>
 +#include <linux/module.h>
-+#include <linux/mutex.h>
 +#include <linux/platform_device.h>
 +
-+#define HONOR_FMI_FAN_COUNT 2
-+#define HONOR_FMI_GFNS_RESULT_SIZE 3
++#define HONOR_FMI_GFNS_RESULT_SIZE	3
 +
 +struct honor_fmi_data {
 +	acpi_handle gfns;
-+	/* Serialize firmware method evaluation. */
-+	struct mutex lock;
 +};
 +
 +static const struct dmi_system_id honor_fmi_dmi_table[] = {
@@ -194,7 +197,6 @@ index 0000000..225066e
 +
 +	input.buffer.pointer = input_bytes;
 +
-+	guard(mutex)(&data->lock);
 +	status = acpi_evaluate_object(data->gfns, NULL, &arguments, &output);
 +	if (ACPI_FAILURE(status))
 +		return -EIO;
@@ -223,21 +225,13 @@ index 0000000..225066e
 +				    enum hwmon_sensor_types type, u32 attr,
 +				    int channel)
 +{
-+	if (type == hwmon_fan && attr == hwmon_fan_input &&
-+	    channel < HONOR_FMI_FAN_COUNT)
-+		return 0444;
-+
-+	return 0;
++	return 0444;
 +}
 +
 +static int honor_fmi_read(struct device *dev, enum hwmon_sensor_types type,
 +			  u32 attr, int channel, long *value)
 +{
 +	struct honor_fmi_data *data = dev_get_drvdata(dev);
-+
-+	if (type != hwmon_fan || attr != hwmon_fan_input ||
-+	    channel >= HONOR_FMI_FAN_COUNT)
-+		return -EOPNOTSUPP;
 +
 +	return honor_fmi_read_rpm(data, channel, value);
 +}
@@ -275,9 +269,6 @@ index 0000000..225066e
 +		return dev_err_probe(&pdev->dev, -ENODEV,
 +				     "firmware does not provide \\GFNS\n");
 +
-+	mutex_init(&data->lock);
-+	platform_set_drvdata(pdev, data);
-+
 +	hwmon_dev = devm_hwmon_device_register_with_info(&pdev->dev, "honor_fmi",
 +							 data,
 +							 &honor_fmi_chip_info,
@@ -309,9 +300,8 @@ index 0000000..225066e
 +							   PLATFORM_DEVID_NONE,
 +							   NULL, 0);
 +	if (IS_ERR(honor_fmi_device)) {
-+		ret = PTR_ERR(honor_fmi_device);
 +		platform_driver_unregister(&honor_fmi_driver);
-+		return ret;
++		return PTR_ERR(honor_fmi_device);
 +	}
 +
 +	return 0;

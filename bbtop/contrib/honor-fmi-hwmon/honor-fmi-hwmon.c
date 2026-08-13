@@ -14,16 +14,12 @@
 #include <linux/err.h>
 #include <linux/hwmon.h>
 #include <linux/module.h>
-#include <linux/mutex.h>
 #include <linux/platform_device.h>
 
-#define HONOR_FMI_FAN_COUNT 2
-#define HONOR_FMI_GFNS_RESULT_SIZE 3
+#define HONOR_FMI_GFNS_RESULT_SIZE	3
 
 struct honor_fmi_data {
 	acpi_handle gfns;
-	/* Serialize firmware method evaluation. */
-	struct mutex lock;
 };
 
 static const struct dmi_system_id honor_fmi_dmi_table[] = {
@@ -58,7 +54,6 @@ static int honor_fmi_read_rpm(struct honor_fmi_data *data, int channel,
 
 	input.buffer.pointer = input_bytes;
 
-	guard(mutex)(&data->lock);
 	status = acpi_evaluate_object(data->gfns, NULL, &arguments, &output);
 	if (ACPI_FAILURE(status))
 		return -EIO;
@@ -87,21 +82,13 @@ static umode_t honor_fmi_is_visible(const void *data,
 				    enum hwmon_sensor_types type, u32 attr,
 				    int channel)
 {
-	if (type == hwmon_fan && attr == hwmon_fan_input &&
-	    channel < HONOR_FMI_FAN_COUNT)
-		return 0444;
-
-	return 0;
+	return 0444;
 }
 
 static int honor_fmi_read(struct device *dev, enum hwmon_sensor_types type,
 			  u32 attr, int channel, long *value)
 {
 	struct honor_fmi_data *data = dev_get_drvdata(dev);
-
-	if (type != hwmon_fan || attr != hwmon_fan_input ||
-	    channel >= HONOR_FMI_FAN_COUNT)
-		return -EOPNOTSUPP;
 
 	return honor_fmi_read_rpm(data, channel, value);
 }
@@ -139,9 +126,6 @@ static int honor_fmi_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, -ENODEV,
 				     "firmware does not provide \\GFNS\n");
 
-	mutex_init(&data->lock);
-	platform_set_drvdata(pdev, data);
-
 	hwmon_dev = devm_hwmon_device_register_with_info(&pdev->dev, "honor_fmi",
 							 data,
 							 &honor_fmi_chip_info,
@@ -173,9 +157,8 @@ static int __init honor_fmi_init(void)
 							   PLATFORM_DEVID_NONE,
 							   NULL, 0);
 	if (IS_ERR(honor_fmi_device)) {
-		ret = PTR_ERR(honor_fmi_device);
 		platform_driver_unregister(&honor_fmi_driver);
-		return ret;
+		return PTR_ERR(honor_fmi_device);
 	}
 
 	return 0;
