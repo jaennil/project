@@ -4,6 +4,7 @@ services:
     command: ["--no-tui", "--listen", "0.0.0.0:9099"]
     environment:
       BBTOP_PROC_ROOT: /host/proc
+      BBTOP_FILESYSTEM_ROOT: /host/root
     pid: host
     ports:
       - "127.0.0.1:9099:9099"
@@ -11,6 +12,7 @@ services:
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
+      - /:/host/root:ro
 
   prometheus:
     image: prom/prometheus:v3.7.3

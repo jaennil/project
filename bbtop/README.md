@@ -21,8 +21,9 @@ cargo run --release -- --no-tui --listen 0.0.0.0:9099
 ```
 
 Options are documented by `bbtop --help`. The exporter intentionally publishes
-only the top 50 CPU-consuming processes by default to bound Prometheus label
-cardinality. Change this with `--top`.
+the union of the top 50 CPU-consuming and top 50 memory-consuming processes by
+default to bound Prometheus label cardinality. Change each ranking limit with
+`--top`.
 
 ## Grafana with history
 
@@ -36,19 +37,22 @@ Open <http://localhost:3000> and sign in with `admin` / `bbtop`. The provisioned
 dashboard is in the **bbtop** folder. Prometheus is available at
 <http://localhost:9091>; samples are retained for 30 days by default.
 
-The container uses the host PID namespace and mounts host `/proc` and `/sys`
-read-only so the dashboard describes the host rather than the container. Review
-that access model before deploying on a shared machine. Ports bind to localhost
-by default.
+The container uses the host PID namespace and mounts host `/proc`, `/sys`, and
+the root filesystem read-only so the dashboard describes the host rather than
+the container. The root mount is used only for filesystem capacity statistics.
+Review that access model before deploying on a shared machine. Ports bind to
+localhost by default.
 
 ## Exported data
 
 - aggregate CPU, logical CPUs, load averages and uptime;
 - total, available and swap memory;
 - network and block-device byte counters;
+- filesystem size, used space and available space per mount point;
 - fan speed in RPM when exposed through Linux `hwmon`;
 - task counts and state;
-- bounded per-process CPU, RSS, virtual memory, threads and I/O counters;
+- bounded top-CPU and top-memory process series with CPU, RSS, virtual memory,
+  threads and I/O counters;
 - collection timestamp and host identity.
 
 Prometheus owns historical retention and rate calculation. In particular,

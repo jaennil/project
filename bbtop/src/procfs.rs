@@ -1,6 +1,8 @@
 use std::{
     collections::HashMap,
+    ffi::CString,
     fs, io,
+    os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -26,6 +28,15 @@ pub struct Fan {
 }
 
 #[derive(Clone, Debug, Default)]
+pub struct Filesystem {
+    pub device: String,
+    pub mountpoint: String,
+    pub filesystem_type: String,
+    pub size_bytes: u64,
+    pub available_bytes: u64,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct Snapshot {
     pub timestamp: u64,
     pub hostname: String,
@@ -45,6 +56,7 @@ pub struct Snapshot {
     pub processes_running: usize,
     pub processes: Vec<Process>,
     pub fans: Vec<Fan>,
+    pub filesystems: Vec<Filesystem>,
 }
 
 impl Snapshot {
@@ -62,6 +74,7 @@ struct CpuTimes {
 pub struct Collector {
     root: PathBuf,
     sys_root: PathBuf,
+    filesystem_root: PathBuf,
     ticks_per_second: f64,
     page_size: u64,
     previous_cpu: CpuTimes,
@@ -70,7 +83,7 @@ pub struct Collector {
 }
 
 impl Collector {
-    pub fn new(root: PathBuf) -> Self {
+    pub fn with_filesystem_root(root: PathBuf, filesystem_root: PathBuf) -> Self {
         let page_size = detect_page_size(&root);
         let sys_root = if root == Path::new("/proc") {
             PathBuf::from("/sys")
@@ -80,6 +93,7 @@ impl Collector {
         Self {
             root,
             sys_root,
+            filesystem_root,
             ticks_per_second: 100.0,
             page_size,
             previous_cpu: CpuTimes::default(),
@@ -115,6 +129,7 @@ impl Collector {
             &self.sys_root,
         );
         let fans = read_fans(&self.sys_root);
+        let filesystems = read_filesystems(&self.root, &self.filesystem_root);
 
         let mut next_process_cpu = HashMap::new();
         let mut processes = Vec::new();
@@ -176,8 +191,103 @@ impl Collector {
                 .count(),
             processes,
             fans,
+            filesystems,
         })
     }
+}
+
+fn read_filesystems(proc_root: &Path, filesystem_root: &Path) -> Vec<Filesystem> {
+    let mountinfo = fs::read_to_string(proc_root.join("1/mountinfo"))
+        .or_else(|_| fs::read_to_string(proc_root.join("self/mountinfo")))
+        .unwrap_or_default();
+    parse_mountinfo(&mountinfo, filesystem_root)
+}
+
+fn parse_mountinfo(input: &str, filesystem_root: &Path) -> Vec<Filesystem> {
+    let mut filesystems = Vec::new();
+    for line in input.lines() {
+        let Some((mount, filesystem)) = line.split_once(" - ") else {
+            continue;
+        };
+        let mount_fields: Vec<&str> = mount.split_whitespace().collect();
+        let filesystem_fields: Vec<&str> = filesystem.split_whitespace().collect();
+        if mount_fields.len() < 5 || filesystem_fields.len() < 2 {
+            continue;
+        }
+        let filesystem_type = filesystem_fields[0];
+        if is_pseudo_filesystem(filesystem_type) {
+            continue;
+        }
+        let mountpoint = decode_mount_field(mount_fields[4]);
+        if filesystems
+            .iter()
+            .any(|entry: &Filesystem| entry.mountpoint == mountpoint)
+        {
+            continue;
+        }
+        let path = filesystem_root.join(mountpoint.trim_start_matches('/'));
+        let Some((size_bytes, available_bytes)) = filesystem_space(&path) else {
+            continue;
+        };
+        filesystems.push(Filesystem {
+            device: decode_mount_field(filesystem_fields[1]),
+            mountpoint,
+            filesystem_type: filesystem_type.to_owned(),
+            size_bytes,
+            available_bytes,
+        });
+    }
+    filesystems.sort_unstable_by(|a, b| a.mountpoint.cmp(&b.mountpoint));
+    filesystems
+}
+
+fn filesystem_space(path: &Path) -> Option<(u64, u64)> {
+    let path = CString::new(path.as_os_str().as_bytes()).ok()?;
+    let mut stats = std::mem::MaybeUninit::<libc::statvfs>::uninit();
+    // SAFETY: path is a valid NUL-terminated string and stats points to writable memory.
+    if unsafe { libc::statvfs(path.as_ptr(), stats.as_mut_ptr()) } != 0 {
+        return None;
+    }
+    // SAFETY: statvfs returned success and initialized stats.
+    let stats = unsafe { stats.assume_init() };
+    let block_size = stats.f_frsize;
+    Some((
+        stats.f_blocks.saturating_mul(block_size),
+        stats.f_bavail.saturating_mul(block_size),
+    ))
+}
+
+fn decode_mount_field(value: &str) -> String {
+    value
+        .replace("\\040", " ")
+        .replace("\\011", "\t")
+        .replace("\\012", "\n")
+        .replace("\\134", "\\")
+}
+
+fn is_pseudo_filesystem(filesystem_type: &str) -> bool {
+    matches!(
+        filesystem_type,
+        "autofs"
+            | "binfmt_misc"
+            | "bpf"
+            | "cgroup"
+            | "cgroup2"
+            | "configfs"
+            | "debugfs"
+            | "devpts"
+            | "devtmpfs"
+            | "efivarfs"
+            | "fusectl"
+            | "hugetlbfs"
+            | "mqueue"
+            | "proc"
+            | "pstore"
+            | "securityfs"
+            | "sysfs"
+            | "tmpfs"
+            | "tracefs"
+    )
 }
 
 fn read_fans(sys_root: &Path) -> Vec<Fan> {
@@ -399,5 +509,13 @@ mod tests {
         assert_eq!(fan_sensor_name("fan12_input").as_deref(), Some("fan12"));
         assert_eq!(fan_sensor_name("fan1_min"), None);
         assert_eq!(fan_sensor_name("temp1_input"), None);
+    }
+
+    #[test]
+    fn decodes_mountinfo_fields() {
+        assert_eq!(decode_mount_field("/media/My\\040Disk"), "/media/My Disk");
+        assert!(is_pseudo_filesystem("tmpfs"));
+        assert!(is_pseudo_filesystem("efivarfs"));
+        assert!(!is_pseudo_filesystem("ext4"));
     }
 }

@@ -21,6 +21,7 @@ struct Config {
     interval: Duration,
     process_limit: usize,
     proc_root: PathBuf,
+    filesystem_root: PathBuf,
     tui: bool,
 }
 
@@ -33,6 +34,9 @@ impl Default for Config {
             proc_root: env::var_os("BBTOP_PROC_ROOT")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("/proc")),
+            filesystem_root: env::var_os("BBTOP_FILESYSTEM_ROOT")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("/")),
             tui: true,
         }
     }
@@ -109,9 +113,10 @@ fn main() -> ExitCode {
 
     let collector_state = Arc::clone(&state);
     let proc_root = config.proc_root.clone();
+    let filesystem_root = config.filesystem_root.clone();
     let interval = config.interval;
     thread::spawn(move || {
-        let mut collector = Collector::new(proc_root);
+        let mut collector = Collector::with_filesystem_root(proc_root, filesystem_root);
         loop {
             let started = Instant::now();
             match collector.collect() {

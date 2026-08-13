@@ -94,16 +94,25 @@
       "fieldConfig": {"defaults": {"unit": "bytes"}},
       "gridPos": {"h": 9, "w": 12, "x": 12, "y": 21},
       "id": 10,
-      "targets": [{"expr": "topk(10, bbtop_process_resident_memory_bytes)", "format": "table", "instant": true, "legendFormat": "{{name}} ({{pid}})", "refId": "A"}],
+      "targets": [{"expr": "topk(10, bbtop_process_resident_memory_bytes)", "legendFormat": "{{name}} ({{pid}})", "refId": "A"}],
       "title": "Top process memory",
-      "transformations": [{"id": "organize", "options": {"excludeByName": {"Time": true, "__name__": true, "instance": true, "job": true, "state": true}, "renameByName": {"Value": "RSS", "name": "Process", "pid": "PID"}}}],
-      "type": "table"
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Used space as a percentage of capacity for each real host filesystem.",
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 30},
+      "id": 12,
+      "targets": [{"expr": "100 * bbtop_filesystem_used_bytes / bbtop_filesystem_size_bytes", "legendFormat": "{{mountpoint}} · {{device}}", "refId": "A"}],
+      "title": "Filesystem usage",
+      "type": "timeseries"
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "description": "RPM reported by Linux hwmon. No data means the firmware or kernel driver does not expose a fan sensor.",
       "fieldConfig": {"defaults": {"min": 0, "unit": "rpm"}},
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 30},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 30},
       "id": 11,
       "targets": [{"expr": "bbtop_fan_speed_rpm", "legendFormat": "{{chip}} · {{sensor}}", "refId": "A"}],
       "title": "Fan speed",

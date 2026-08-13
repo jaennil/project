@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::{cmp::Reverse, collections::HashSet, fmt::Write};
 
 use crate::procfs::Snapshot;
 
@@ -111,6 +111,35 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
             fan.rpm
         );
     }
+    for name in [
+        "bbtop_filesystem_size_bytes",
+        "bbtop_filesystem_available_bytes",
+        "bbtop_filesystem_used_bytes",
+    ] {
+        let _ = writeln!(output, "# TYPE {name} gauge");
+    }
+    for filesystem in &snapshot.filesystems {
+        let labels = format!(
+            "device=\"{}\",mountpoint=\"{}\",fstype=\"{}\"",
+            escape_label(&filesystem.device),
+            escape_label(&filesystem.mountpoint),
+            escape_label(&filesystem.filesystem_type)
+        );
+        let used = filesystem
+            .size_bytes
+            .saturating_sub(filesystem.available_bytes);
+        let _ = writeln!(
+            output,
+            "bbtop_filesystem_size_bytes{{{labels}}} {}",
+            filesystem.size_bytes
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_filesystem_available_bytes{{{labels}}} {}",
+            filesystem.available_bytes
+        );
+        let _ = writeln!(output, "bbtop_filesystem_used_bytes{{{labels}}} {used}");
+    }
     let _ = writeln!(output, "# HELP bbtop_info Host identity");
     let _ = writeln!(output, "# TYPE bbtop_info gauge");
     let _ = writeln!(
@@ -135,7 +164,20 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
         };
         let _ = writeln!(output, "# TYPE {name} {kind}");
     }
+    let mut selected = Vec::new();
+    let mut pids = HashSet::new();
     for process in snapshot.processes.iter().take(process_limit) {
+        pids.insert(process.pid);
+        selected.push(process);
+    }
+    let mut by_memory: Vec<_> = snapshot.processes.iter().collect();
+    by_memory.sort_unstable_by_key(|process| Reverse(process.rss_bytes));
+    for process in by_memory.into_iter().take(process_limit) {
+        if pids.insert(process.pid) {
+            selected.push(process);
+        }
+    }
+    for process in selected {
         let labels = format!(
             "pid=\"{}\",name=\"{}\"",
             process.pid,
@@ -195,6 +237,7 @@ fn escape_label(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::procfs::{Filesystem, Process};
 
     #[test]
     fn escapes_prometheus_labels() {
@@ -211,5 +254,48 @@ mod tests {
         let rendered = render_prometheus(&snapshot, 10);
         assert!(rendered.contains("bbtop_cpu_usage_percent 12.5"));
         assert!(rendered.contains("bbtop_info{hostname=\"box\"} 1"));
+    }
+
+    #[test]
+    fn renders_filesystem_capacity() {
+        let snapshot = Snapshot {
+            filesystems: vec![Filesystem {
+                device: "/dev/test".into(),
+                mountpoint: "/data".into(),
+                filesystem_type: "ext4".into(),
+                size_bytes: 1_000,
+                available_bytes: 250,
+            }],
+            ..Snapshot::default()
+        };
+        let rendered = render_prometheus(&snapshot, 10);
+        assert!(rendered.contains(
+            "bbtop_filesystem_used_bytes{device=\"/dev/test\",mountpoint=\"/data\",fstype=\"ext4\"} 750"
+        ));
+    }
+
+    #[test]
+    fn exports_top_cpu_and_top_memory_processes() {
+        let snapshot = Snapshot {
+            processes: vec![
+                Process {
+                    pid: 1,
+                    name: "cpu".into(),
+                    cpu_percent: 99.0,
+                    rss_bytes: 1,
+                    ..Process::default()
+                },
+                Process {
+                    pid: 2,
+                    name: "memory".into(),
+                    rss_bytes: 1_000_000,
+                    ..Process::default()
+                },
+            ],
+            ..Snapshot::default()
+        };
+        let rendered = render_prometheus(&snapshot, 1);
+        assert!(rendered.contains("pid=\"1\",name=\"cpu\""));
+        assert!(rendered.contains("pid=\"2\",name=\"memory\""));
     }
 }
