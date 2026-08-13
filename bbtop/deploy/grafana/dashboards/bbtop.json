@@ -45,7 +45,7 @@
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "percent", "custom": {"spanNulls": true}}},
+      "fieldConfig": {"defaults": {"unit": "percent"}},
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
       "id": 5,
       "targets": [{"expr": "bbtop_cpu_usage_percent", "legendFormat": "CPU", "refId": "A"}],
@@ -54,7 +54,7 @@
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "bytes", "custom": {"spanNulls": true}}},
+      "fieldConfig": {"defaults": {"unit": "bytes"}},
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
       "id": 6,
       "targets": [{"expr": "bbtop_memory_total_bytes - bbtop_memory_available_bytes", "legendFormat": "used", "refId": "A"}, {"expr": "bbtop_memory_available_bytes", "legendFormat": "available", "refId": "B"}],
@@ -63,7 +63,7 @@
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "Bps", "custom": {"spanNulls": true}}},
+      "fieldConfig": {"defaults": {"unit": "Bps"}},
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13},
       "id": 7,
       "targets": [{"expr": "rate(bbtop_network_receive_bytes_total[$__rate_interval])", "legendFormat": "receive", "refId": "A"}, {"expr": "rate(bbtop_network_transmit_bytes_total[$__rate_interval])", "legendFormat": "transmit", "refId": "B"}],
@@ -72,7 +72,7 @@
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"max": 3500000000, "min": 0, "unit": "Bps", "custom": {"spanNulls": true, "thresholdsStyle": {"mode": "line"}}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 2450000000}, {"color": "red", "value": 3150000000}]}}},
+      "fieldConfig": {"defaults": {"max": 3500000000, "min": 0, "unit": "Bps", "custom": {"thresholdsStyle": {"mode": "line"}}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 2450000000}, {"color": "red", "value": 3150000000}]}}},
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13},
       "id": 8,
       "targets": [{"expr": "rate(bbtop_disk_read_bytes_total[$__rate_interval])", "legendFormat": "read", "refId": "A"}, {"expr": "rate(bbtop_disk_write_bytes_total[$__rate_interval])", "legendFormat": "write", "refId": "B"}],
@@ -82,7 +82,7 @@
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "percent", "custom": {"spanNulls": true}}},
+      "fieldConfig": {"defaults": {"unit": "percent"}},
       "gridPos": {"h": 9, "w": 12, "x": 0, "y": 21},
       "id": 9,
       "targets": [{"expr": "topk(10, bbtop_process_cpu_usage_percent)", "legendFormat": "{{name}} ({{pid}})", "refId": "A"}],
@@ -91,7 +91,7 @@
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "bytes", "custom": {"spanNulls": true}}},
+      "fieldConfig": {"defaults": {"unit": "bytes"}},
       "gridPos": {"h": 9, "w": 12, "x": 12, "y": 21},
       "id": 10,
       "targets": [{"expr": "topk(10, bbtop_process_resident_memory_bytes)", "legendFormat": "{{name}} ({{pid}})", "refId": "A"}],
@@ -101,7 +101,7 @@
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "description": "Used space as a percentage of capacity for each real host filesystem.",
-      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent", "custom": {"spanNulls": true}}},
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}},
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 30},
       "id": 12,
       "targets": [{"expr": "100 * bbtop_filesystem_used_bytes / bbtop_filesystem_size_bytes", "legendFormat": "{{mountpoint}} · {{device}}", "refId": "A"}],
@@ -111,7 +111,7 @@
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "description": "RPM reported by Linux hwmon. No data means the firmware or kernel driver does not expose a fan sensor.",
-      "fieldConfig": {"defaults": {"min": 0, "unit": "rpm", "custom": {"spanNulls": true}}},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "rpm"}},
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 30},
       "id": 11,
       "targets": [{"expr": "bbtop_fan_speed_rpm", "legendFormat": "{{chip}} · {{sensor}}", "refId": "A"}],

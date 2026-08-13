@@ -1,0 +1,27 @@
+[Unit]
+Description=bbtop host metrics exporter
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/bbtop --no-tui --listen 127.0.0.1:9099 --interval 2 --top 50
+Restart=always
+RestartSec=2
+Nice=-10
+OOMScoreAdjust=-900
+CPUWeight=900
+IOWeight=900
+IOSchedulingClass=best-effort
+IOSchedulingPriority=0
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

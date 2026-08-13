@@ -67,3 +67,8 @@ confirmation and permission checks.
 
 An experimental read-only hwmon driver for the HONOR FMI-XX is available under
 [`contrib/honor-fmi-hwmon`](contrib/honor-fmi-hwmon/README.md).
+
+For resilient remote collection, systemd units for a high-priority host agent
+and an outbound reverse tunnel are available in [`deploy/systemd`](deploy/systemd).
+The exporter remains bound to localhost; the tunnel exposes it only through an
+internal ClusterIP service in the homelab cluster.

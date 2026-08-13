@@ -1,0 +1,22 @@
+[Unit]
+Description=bbtop reverse tunnel to homelab Prometheus
+Wants=network-online.target
+After=network-online.target bbtop.service
+Requires=bbtop.service
+
+[Service]
+Type=simple
+User=jaennil
+ExecStart=/usr/bin/ssh -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/home/jaennil/.ssh/known_hosts -p 32222 -R 0.0.0.0:19099:127.0.0.1:9099 tunnel.dubrovskih.ru
+Restart=always
+RestartSec=5
+Nice=-5
+OOMScoreAdjust=-500
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
