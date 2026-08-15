@@ -1,4 +1,4 @@
-# Linux upstream patch v3
+# Linux upstream patch v4
 
 The patch in this directory is based on Linux master commit `3d6d817622b0`
 and adds a read-only hwmon driver for the HONOR FMI-XX.
@@ -8,6 +8,7 @@ simplifying the hwmon callbacks and error path, dropping unused platform
 drvdata, aligning the macro definition, and ordering the MAINTAINERS entry.
 Version 3 drops the RFC tag after Guenter confirmed that the patch looks good
 and has no further comments. There are no code changes from version 2.
+Version 4 adds the missing `ACPI` Kconfig dependency identified by Sashiko.
 
 ## Validation
 
@@ -36,4 +37,4 @@ Cc for placement review:
 - `linux-kernel@vger.kernel.org`
 
 The patch is sent as plain-text email using `git send-email`, not through a
-GitHub pull request.
+GitHub pull request. Version 4 replies to the v3 message.
