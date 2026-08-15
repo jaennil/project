@@ -1,11 +1,13 @@
-# Linux upstream RFC v2
+# Linux upstream patch v3
 
 The patch in this directory is based on Linux master commit `3d6d817622b0`
 and adds a read-only hwmon driver for the HONOR FMI-XX.
 
-Version 2 addresses review from Guenter Roeck by removing the redundant mutex,
+Version 2 addressed review from Guenter Roeck by removing the redundant mutex,
 simplifying the hwmon callbacks and error path, dropping unused platform
 drvdata, aligning the macro definition, and ordering the MAINTAINERS entry.
+Version 3 drops the RFC tag after Guenter confirmed that the patch looks good
+and has no further comments. There are no code changes from version 2.
 
 ## Validation
 
@@ -19,10 +21,7 @@ drvdata, aligning the macro definition, and ordering the MAINTAINERS entry.
   0 RPM before the installed DKMS module was restored;
 - the driver exposes no write or PWM operation.
 
-Suspend/resume and a second cold boot should be tested before changing the RFC
-to a non-RFC patch.
-
-## Proposed recipients
+## Recipients
 
 To:
 
@@ -36,5 +35,5 @@ Cc for placement review:
 - `platform-driver-x86@vger.kernel.org`
 - `linux-kernel@vger.kernel.org`
 
-The RFC should be sent with plain-text email using `git send-email`. Do not send
-the patch through a GitHub pull request.
+The patch is sent as plain-text email using `git send-email`, not through a
+GitHub pull request.

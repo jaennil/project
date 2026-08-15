@@ -1,9 +1,9 @@
 From 5aaaa021f6c8b91e447ed9f693563940dcf58f8e Mon Sep 17 00:00:00 2001
-In-Reply-To: <20260812192242.859307-1-testname142@gmail.com>
-References: <20260812192242.859307-1-testname142@gmail.com>
+In-Reply-To: <20260813091411.1186193-1-testname142@gmail.com>
+References: <20260812192242.859307-1-testname142@gmail.com> <20260813091411.1186193-1-testname142@gmail.com>
 From: Nikita Dubrovskih <testname142@gmail.com>
 Date: Sun, 9 Aug 2026 21:17:10 +0300
-Subject: [RFC PATCH v2] hwmon: Add fan monitoring support for HONOR FMI-XX
+Subject: [PATCH v3] hwmon: Add fan monitoring support for HONOR FMI-XX
 
 The HONOR FMI-XX firmware exposes a serialized \\GFNS ACPI method.
 It returns a status byte and a 16-bit fan speed in RPM for either of two
@@ -19,6 +19,9 @@ remained at 0 RPM during idle and a short CPU load.
 
 Signed-off-by: Nikita Dubrovskih <testname142@gmail.com>
 ---
+Changes in v3:
+- Drop the RFC tag following maintainer review; no code changes.
+
 Changes in v2:
 - Drop the redundant mutex and callback argument validation.
 - Remove unused platform drvdata and simplify the init error path.
