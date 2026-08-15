@@ -50,6 +50,7 @@ localhost by default.
 - network and block-device byte counters;
 - filesystem size, used space and available space per mount point;
 - fan speed in RPM when exposed through Linux `hwmon`;
+- temperatures from every Linux `hwmon` sensor, labeled by chip and sensor;
 - task counts and state;
 - bounded top-CPU and top-memory process series with CPU, RSS, virtual memory,
   threads and I/O counters;

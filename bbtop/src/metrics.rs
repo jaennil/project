@@ -111,6 +111,26 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
             fan.rpm
         );
     }
+    metric(
+        &mut output,
+        "bbtop_temperatures_detected",
+        "gauge",
+        snapshot.temperatures.len(),
+    );
+    let _ = writeln!(
+        output,
+        "# HELP bbtop_temperature_celsius Temperature reported by Linux hwmon"
+    );
+    let _ = writeln!(output, "# TYPE bbtop_temperature_celsius gauge");
+    for temperature in &snapshot.temperatures {
+        let _ = writeln!(
+            output,
+            "bbtop_temperature_celsius{{chip=\"{}\",sensor=\"{}\"}} {:.3}",
+            escape_label(&temperature.chip),
+            escape_label(&temperature.sensor),
+            temperature.celsius
+        );
+    }
     for name in [
         "bbtop_filesystem_size_bytes",
         "bbtop_filesystem_available_bytes",
@@ -237,7 +257,7 @@ fn escape_label(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::procfs::{Filesystem, Process};
+    use crate::procfs::{Filesystem, Process, Temperature};
 
     #[test]
     fn escapes_prometheus_labels() {
@@ -272,6 +292,22 @@ mod tests {
         assert!(rendered.contains(
             "bbtop_filesystem_used_bytes{device=\"/dev/test\",mountpoint=\"/data\",fstype=\"ext4\"} 750"
         ));
+    }
+
+    #[test]
+    fn renders_hwmon_temperatures() {
+        let snapshot = Snapshot {
+            temperatures: vec![Temperature {
+                chip: "amdgpu".into(),
+                sensor: "edge".into(),
+                celsius: 64.125,
+            }],
+            ..Snapshot::default()
+        };
+        let rendered = render_prometheus(&snapshot, 10);
+        assert!(
+            rendered.contains("bbtop_temperature_celsius{chip=\"amdgpu\",sensor=\"edge\"} 64.125")
+        );
     }
 
     #[test]
