@@ -196,6 +196,73 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
             discharge_watts
         );
     }
+    render_electrical_readings(
+        &mut output,
+        "bbtop_voltage_volts",
+        "Voltage reported by Linux hwmon",
+        &snapshot.voltages,
+    );
+    render_electrical_readings(
+        &mut output,
+        "bbtop_current_amperes",
+        "Current reported by Linux hwmon",
+        &snapshot.currents,
+    );
+    let _ = writeln!(
+        output,
+        "# HELP bbtop_temperature_limit_celsius Temperature limits reported by Linux hwmon"
+    );
+    let _ = writeln!(output, "# TYPE bbtop_temperature_limit_celsius gauge");
+    for limit in &snapshot.temperature_limits {
+        let _ = writeln!(
+            output,
+            "bbtop_temperature_limit_celsius{{chip=\"{}\",sensor=\"{}\",limit=\"{}\"}} {:.3}",
+            escape_label(&limit.chip),
+            escape_label(&limit.sensor),
+            escape_label(&limit.limit),
+            limit.celsius
+        );
+    }
+    let _ = writeln!(
+        output,
+        "# HELP bbtop_temperature_alarm Temperature alarm state reported by Linux hwmon"
+    );
+    let _ = writeln!(output, "# TYPE bbtop_temperature_alarm gauge");
+    for alarm in &snapshot.temperature_alarms {
+        let _ = writeln!(
+            output,
+            "bbtop_temperature_alarm{{chip=\"{}\",sensor=\"{}\"}} {}",
+            escape_label(&alarm.chip),
+            escape_label(&alarm.sensor),
+            alarm.value
+        );
+    }
+    let _ = writeln!(
+        output,
+        "# HELP bbtop_cpu_frequency_hertz Current CPU frequency by logical CPU"
+    );
+    let _ = writeln!(output, "# TYPE bbtop_cpu_frequency_hertz gauge");
+    for frequency in &snapshot.cpu_frequencies {
+        let _ = writeln!(
+            output,
+            "bbtop_cpu_frequency_hertz{{cpu=\"{}\"}} {}",
+            escape_label(&frequency.cpu),
+            frequency.hertz
+        );
+    }
+    let _ = writeln!(
+        output,
+        "# HELP bbtop_mains_online Whether an external power supply is online"
+    );
+    let _ = writeln!(output, "# TYPE bbtop_mains_online gauge");
+    for supply in &snapshot.mains_supplies {
+        let _ = writeln!(
+            output,
+            "bbtop_mains_online{{supply=\"{}\"}} {}",
+            escape_label(&supply.supply),
+            u8::from(supply.online)
+        );
+    }
     for name in [
         "bbtop_filesystem_size_bytes",
         "bbtop_filesystem_available_bytes",
@@ -310,6 +377,25 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
 fn metric(output: &mut String, name: &str, kind: &str, value: impl std::fmt::Display) {
     let _ = writeln!(output, "# TYPE {name} {kind}");
     let _ = writeln!(output, "{name} {value}");
+}
+
+fn render_electrical_readings(
+    output: &mut String,
+    name: &str,
+    help: &str,
+    readings: &[crate::procfs::ElectricalReading],
+) {
+    let _ = writeln!(output, "# HELP {name} {help}");
+    let _ = writeln!(output, "# TYPE {name} gauge");
+    for reading in readings {
+        let _ = writeln!(
+            output,
+            "{name}{{chip=\"{}\",sensor=\"{}\"}} {:.6}",
+            escape_label(&reading.chip),
+            escape_label(&reading.sensor),
+            reading.value
+        );
+    }
 }
 
 fn escape_label(value: &str) -> String {

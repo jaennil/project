@@ -156,6 +156,53 @@
       "targets": [{"expr": "bbtop_battery_charge_percent", "legendFormat": "{{battery}} · {{status}}", "refId": "A"}],
       "title": "Battery charge",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "volt"}},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 70},
+      "id": 17,
+      "targets": [{"expr": "bbtop_voltage_volts", "legendFormat": "{{chip}} · {{sensor}}", "refId": "A"}],
+      "title": "Hardware voltages",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "amp"}},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 70},
+      "id": 18,
+      "targets": [{"expr": "bbtop_current_amperes", "legendFormat": "{{chip}} · {{sensor}}", "refId": "A"}],
+      "title": "Hardware currents",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Hardware temperature limits. Invalid firmware sentinel values are excluded.",
+      "fieldConfig": {"defaults": {"min": 0, "unit": "celsius"}},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 78},
+      "id": 19,
+      "targets": [{"expr": "bbtop_temperature_limit_celsius", "legendFormat": "{{chip}} · {{sensor}} · {{limit}}", "refId": "A"}],
+      "title": "Temperature safety limits",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "hertz"}},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 78},
+      "id": 20,
+      "targets": [{"expr": "bbtop_cpu_frequency_hertz", "legendFormat": "CPU {{cpu}}", "refId": "A"}],
+      "title": "CPU frequency per core",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"max": 1, "min": 0, "unit": "bool"}},
+      "gridPos": {"h": 5, "w": 12, "x": 0, "y": 86},
+      "id": 21,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}},
+      "targets": [{"expr": "bbtop_mains_online", "legendFormat": "{{supply}}", "refId": "A"}],
+      "title": "External power connected",
+      "type": "stat"
     }
   ],
   "refresh": "5s",
@@ -166,5 +213,5 @@
   "timezone": "browser",
   "title": "bbtop Linux overview",
   "uid": "bbtop-linux",
-  "version": 5
+  "version": 6
 }

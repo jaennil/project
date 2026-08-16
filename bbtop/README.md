@@ -56,6 +56,8 @@ localhost by default.
 - estimated whole-laptop draw from battery voltage and current while discharging;
   charging systems expose battery charging power but not reliable wall power;
 - battery charge percentage and charging state.
+- hwmon voltage/current readings, valid thermal safety limits and alarms, CPU
+  frequency per logical core, and external-power connection state.
 - task counts and state;
 - bounded top-CPU and top-memory process series with CPU, RSS, virtual memory,
   threads and I/O counters;

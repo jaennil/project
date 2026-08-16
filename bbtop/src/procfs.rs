@@ -51,6 +51,40 @@ pub struct BatteryPower {
 }
 
 #[derive(Clone, Debug, Default)]
+pub struct ElectricalReading {
+    pub chip: String,
+    pub sensor: String,
+    pub value: f64,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct TemperatureLimit {
+    pub chip: String,
+    pub sensor: String,
+    pub limit: String,
+    pub celsius: f64,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct TemperatureAlarm {
+    pub chip: String,
+    pub sensor: String,
+    pub value: u64,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct CpuFrequency {
+    pub cpu: String,
+    pub hertz: u64,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct MainsSupply {
+    pub supply: String,
+    pub online: bool,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct Filesystem {
     pub device: String,
     pub mountpoint: String,
@@ -82,6 +116,12 @@ pub struct Snapshot {
     pub temperatures: Vec<Temperature>,
     pub power: Vec<Power>,
     pub battery_power: Vec<BatteryPower>,
+    pub voltages: Vec<ElectricalReading>,
+    pub currents: Vec<ElectricalReading>,
+    pub temperature_limits: Vec<TemperatureLimit>,
+    pub temperature_alarms: Vec<TemperatureAlarm>,
+    pub cpu_frequencies: Vec<CpuFrequency>,
+    pub mains_supplies: Vec<MainsSupply>,
     pub filesystems: Vec<Filesystem>,
 }
 
@@ -158,6 +198,12 @@ impl Collector {
         let temperatures = read_temperatures(&self.sys_root);
         let power = read_power(&self.sys_root);
         let battery_power = read_battery_power(&self.sys_root);
+        let voltages = read_electrical_readings(&self.sys_root, "in", 1_000.0);
+        let currents = read_electrical_readings(&self.sys_root, "curr", 1_000.0);
+        let temperature_limits = read_temperature_limits(&self.sys_root);
+        let temperature_alarms = read_temperature_alarms(&self.sys_root);
+        let cpu_frequencies = read_cpu_frequencies(&self.sys_root);
+        let mains_supplies = read_mains_supplies(&self.sys_root);
         let filesystems = read_filesystems(&self.root, &self.filesystem_root);
 
         let mut next_process_cpu = HashMap::new();
@@ -223,6 +269,12 @@ impl Collector {
             temperatures,
             power,
             battery_power,
+            voltages,
+            currents,
+            temperature_limits,
+            temperature_alarms,
+            cpu_frequencies,
+            mains_supplies,
             filesystems,
         })
     }
@@ -486,6 +538,173 @@ fn read_battery_power(sys_root: &Path) -> Vec<BatteryPower> {
     batteries
 }
 
+fn read_electrical_readings(sys_root: &Path, prefix: &str, divisor: f64) -> Vec<ElectricalReading> {
+    let mut readings = Vec::new();
+    let Ok(chips) = fs::read_dir(sys_root.join("class/hwmon")) else {
+        return readings;
+    };
+    for chip in chips.flatten() {
+        let chip_name = fs::read_to_string(chip.path().join("name"))
+            .unwrap_or_else(|_| "unknown".into())
+            .trim()
+            .to_owned();
+        let Ok(files) = fs::read_dir(chip.path()) else {
+            continue;
+        };
+        for file in files.flatten() {
+            let file_name = file.file_name().to_string_lossy().to_string();
+            let Some(number) = input_sensor_number(&file_name, prefix) else {
+                continue;
+            };
+            let Some(value) = read_i64(&file.path()) else {
+                continue;
+            };
+            let sensor = fs::read_to_string(chip.path().join(format!("{prefix}{number}_label")))
+                .ok()
+                .map(|label| label.trim().to_owned())
+                .filter(|label| !label.is_empty())
+                .unwrap_or_else(|| format!("{prefix}{number}"));
+            readings.push(ElectricalReading {
+                chip: chip_name.clone(),
+                sensor,
+                value: value as f64 / divisor,
+            });
+        }
+    }
+    readings.sort_unstable_by(|a, b| (&a.chip, &a.sensor).cmp(&(&b.chip, &b.sensor)));
+    readings
+}
+
+fn read_temperature_limits(sys_root: &Path) -> Vec<TemperatureLimit> {
+    let mut limits = Vec::new();
+    let Ok(chips) = fs::read_dir(sys_root.join("class/hwmon")) else {
+        return limits;
+    };
+    for chip in chips.flatten() {
+        let chip_name = fs::read_to_string(chip.path().join("name"))
+            .unwrap_or_else(|_| "unknown".into())
+            .trim()
+            .to_owned();
+        let Ok(files) = fs::read_dir(chip.path()) else {
+            continue;
+        };
+        for file in files.flatten() {
+            let file_name = file.file_name().to_string_lossy().to_string();
+            let Some((number, limit)) = temperature_limit(&file_name) else {
+                continue;
+            };
+            let Some(millidegrees) = read_i64(&file.path()) else {
+                continue;
+            };
+            let celsius = millidegrees as f64 / 1_000.0;
+            if !(-100.0..=250.0).contains(&celsius) {
+                continue;
+            }
+            let sensor = fs::read_to_string(chip.path().join(format!("temp{number}_label")))
+                .ok()
+                .map(|label| label.trim().to_owned())
+                .filter(|label| !label.is_empty())
+                .unwrap_or_else(|| format!("temp{number}"));
+            limits.push(TemperatureLimit {
+                chip: chip_name.clone(),
+                sensor,
+                limit: limit.into(),
+                celsius,
+            });
+        }
+    }
+    limits.sort_unstable_by(|a, b| {
+        (&a.chip, &a.sensor, &a.limit).cmp(&(&b.chip, &b.sensor, &b.limit))
+    });
+    limits
+}
+
+fn read_temperature_alarms(sys_root: &Path) -> Vec<TemperatureAlarm> {
+    let mut alarms = Vec::new();
+    let Ok(chips) = fs::read_dir(sys_root.join("class/hwmon")) else {
+        return alarms;
+    };
+    for chip in chips.flatten() {
+        let chip_name = fs::read_to_string(chip.path().join("name"))
+            .unwrap_or_else(|_| "unknown".into())
+            .trim()
+            .to_owned();
+        let Ok(files) = fs::read_dir(chip.path()) else {
+            continue;
+        };
+        for file in files.flatten() {
+            let file_name = file.file_name().to_string_lossy().to_string();
+            let Some(number) = sensor_number_with_suffix(&file_name, "temp", "alarm") else {
+                continue;
+            };
+            let Some(value) = read_i64(&file.path()).and_then(|value| u64::try_from(value).ok())
+            else {
+                continue;
+            };
+            let sensor = fs::read_to_string(chip.path().join(format!("temp{number}_label")))
+                .ok()
+                .map(|label| label.trim().to_owned())
+                .filter(|label| !label.is_empty())
+                .unwrap_or_else(|| format!("temp{number}"));
+            alarms.push(TemperatureAlarm {
+                chip: chip_name.clone(),
+                sensor,
+                value,
+            });
+        }
+    }
+    alarms.sort_unstable_by(|a, b| (&a.chip, &a.sensor).cmp(&(&b.chip, &b.sensor)));
+    alarms
+}
+
+fn read_cpu_frequencies(sys_root: &Path) -> Vec<CpuFrequency> {
+    let mut frequencies = Vec::new();
+    let Ok(policies) = fs::read_dir(sys_root.join("devices/system/cpu/cpufreq")) else {
+        return frequencies;
+    };
+    for policy in policies.flatten() {
+        let Ok(cpus) = fs::read_to_string(policy.path().join("affected_cpus")) else {
+            continue;
+        };
+        let Some(kilohertz) = read_i64(&policy.path().join("scaling_cur_freq")) else {
+            continue;
+        };
+        for cpu in cpus.split_whitespace() {
+            frequencies.push(CpuFrequency {
+                cpu: cpu.into(),
+                hertz: kilohertz.max(0) as u64 * 1_000,
+            });
+        }
+    }
+    frequencies.sort_unstable_by(|a, b| a.cpu.cmp(&b.cpu));
+    frequencies
+}
+
+fn read_mains_supplies(sys_root: &Path) -> Vec<MainsSupply> {
+    let mut supplies = Vec::new();
+    let Ok(entries) = fs::read_dir(sys_root.join("class/power_supply")) else {
+        return supplies;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if fs::read_to_string(path.join("type"))
+            .ok()
+            .as_deref()
+            .map(str::trim)
+            != Some("Mains")
+        {
+            continue;
+        }
+        let online = read_i64(&path.join("online")).unwrap_or(0) != 0;
+        supplies.push(MainsSupply {
+            supply: entry.file_name().to_string_lossy().into_owned(),
+            online,
+        });
+    }
+    supplies.sort_unstable_by(|a, b| a.supply.cmp(&b.supply));
+    supplies
+}
+
 fn read_i64(path: &Path) -> Option<i64> {
     fs::read_to_string(path).ok()?.trim().parse().ok()
 }
@@ -511,6 +730,32 @@ fn power_sensor(file_name: &str) -> Option<(&str, &str)> {
         if let Some(number) = number.strip_suffix(suffix) {
             return (!number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit()))
                 .then_some((number, reading));
+        }
+    }
+    None
+}
+
+fn input_sensor_number<'a>(file_name: &'a str, prefix: &str) -> Option<&'a str> {
+    sensor_number_with_suffix(file_name, prefix, "input")
+}
+
+fn sensor_number_with_suffix<'a>(
+    file_name: &'a str,
+    prefix: &str,
+    suffix: &str,
+) -> Option<&'a str> {
+    let number = file_name
+        .strip_prefix(prefix)?
+        .strip_suffix(&format!("_{suffix}"))?;
+    (!number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())).then_some(number)
+}
+
+fn temperature_limit(file_name: &str) -> Option<(&str, &str)> {
+    let number = file_name.strip_prefix("temp")?;
+    for suffix in ["min", "max", "crit", "emergency"] {
+        if let Some(number) = number.strip_suffix(&format!("_{suffix}")) {
+            return (!number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit()))
+                .then_some((number, suffix));
         }
     }
     None
