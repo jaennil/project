@@ -263,6 +263,7 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
             u8::from(supply.online)
         );
     }
+    render_nvme_smart(&mut output, &snapshot.nvme_smart);
     for name in [
         "bbtop_filesystem_size_bytes",
         "bbtop_filesystem_available_bytes",
@@ -394,6 +395,87 @@ fn render_electrical_readings(
             escape_label(&reading.chip),
             escape_label(&reading.sensor),
             reading.value
+        );
+    }
+}
+
+fn render_nvme_smart(output: &mut String, devices: &[crate::procfs::NvmeSmart]) {
+    for name in [
+        "bbtop_nvme_percentage_used",
+        "bbtop_nvme_available_spare_percent",
+        "bbtop_nvme_available_spare_threshold_percent",
+        "bbtop_nvme_critical_warning",
+        "bbtop_nvme_data_read_bytes_total",
+        "bbtop_nvme_data_written_bytes_total",
+        "bbtop_nvme_power_cycles_total",
+        "bbtop_nvme_power_on_hours_total",
+        "bbtop_nvme_unsafe_shutdowns_total",
+        "bbtop_nvme_media_errors_total",
+        "bbtop_nvme_error_log_entries_total",
+    ] {
+        let metric_type = if name.ends_with("_total") {
+            "counter"
+        } else {
+            "gauge"
+        };
+        let _ = writeln!(output, "# TYPE {name} {metric_type}");
+    }
+    for smart in devices {
+        let labels = format!("device=\"{}\"", escape_label(&smart.device));
+        let _ = writeln!(
+            output,
+            "bbtop_nvme_percentage_used{{{labels}}} {}",
+            smart.percentage_used
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_nvme_available_spare_percent{{{labels}}} {}",
+            smart.available_spare
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_nvme_available_spare_threshold_percent{{{labels}}} {}",
+            smart.available_spare_threshold
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_nvme_critical_warning{{{labels}}} {}",
+            smart.critical_warning
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_nvme_data_read_bytes_total{{{labels}}} {}",
+            smart.data_units_read.saturating_mul(512_000)
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_nvme_data_written_bytes_total{{{labels}}} {}",
+            smart.data_units_written.saturating_mul(512_000)
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_nvme_power_cycles_total{{{labels}}} {}",
+            smart.power_cycles
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_nvme_power_on_hours_total{{{labels}}} {}",
+            smart.power_on_hours
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_nvme_unsafe_shutdowns_total{{{labels}}} {}",
+            smart.unsafe_shutdowns
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_nvme_media_errors_total{{{labels}}} {}",
+            smart.media_errors
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_nvme_error_log_entries_total{{{labels}}} {}",
+            smart.error_log_entries
         );
     }
 }

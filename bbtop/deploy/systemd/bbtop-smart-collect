@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+umask 022
+temporary=$(mktemp /run/bbtop/nvme-smart.json.XXXXXX)
+trap 'rm -f "$temporary"' EXIT HUP INT TERM
+
+/usr/bin/smartctl -a -j /dev/nvme0 >"$temporary"
+chmod 0644 "$temporary"
+mv "$temporary" /run/bbtop/nvme-smart.json

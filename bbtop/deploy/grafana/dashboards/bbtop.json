@@ -203,6 +203,24 @@
       "targets": [{"expr": "bbtop_mains_online", "legendFormat": "{{supply}}", "refId": "A"}],
       "title": "External power connected",
       "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 91},
+      "id": 22,
+      "targets": [{"expr": "bbtop_nvme_percentage_used", "legendFormat": "{{device}} · used", "refId": "A"}, {"expr": "bbtop_nvme_available_spare_percent", "legendFormat": "{{device}} · spare", "refId": "B"}],
+      "title": "NVMe health",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short"}},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 91},
+      "id": 23,
+      "targets": [{"expr": "bbtop_nvme_media_errors_total", "legendFormat": "{{device}} · media errors", "refId": "A"}, {"expr": "bbtop_nvme_error_log_entries_total", "legendFormat": "{{device}} · error log", "refId": "B"}, {"expr": "bbtop_nvme_unsafe_shutdowns_total", "legendFormat": "{{device}} · unsafe shutdowns", "refId": "C"}],
+      "title": "NVMe errors and unsafe shutdowns",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",
@@ -213,5 +231,5 @@
   "timezone": "browser",
   "title": "bbtop Linux overview",
   "uid": "bbtop-linux",
-  "version": 6
+  "version": 7
 }

@@ -1,0 +1,19 @@
+[Unit]
+Description=bbtop read-only NVMe SMART collector
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RuntimeDirectory=bbtop
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/local/libexec/bbtop-smart-collect
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=CAP_SYS_ADMIN

@@ -1,0 +1,10 @@
+[Unit]
+Description=Run bbtop NVMe SMART collector every minute
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

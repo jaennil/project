@@ -85,6 +85,22 @@ pub struct MainsSupply {
 }
 
 #[derive(Clone, Debug, Default)]
+pub struct NvmeSmart {
+    pub device: String,
+    pub percentage_used: u64,
+    pub available_spare: u64,
+    pub available_spare_threshold: u64,
+    pub critical_warning: u64,
+    pub data_units_read: u64,
+    pub data_units_written: u64,
+    pub power_cycles: u64,
+    pub power_on_hours: u64,
+    pub unsafe_shutdowns: u64,
+    pub media_errors: u64,
+    pub error_log_entries: u64,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct Filesystem {
     pub device: String,
     pub mountpoint: String,
@@ -122,6 +138,7 @@ pub struct Snapshot {
     pub temperature_alarms: Vec<TemperatureAlarm>,
     pub cpu_frequencies: Vec<CpuFrequency>,
     pub mains_supplies: Vec<MainsSupply>,
+    pub nvme_smart: Vec<NvmeSmart>,
     pub filesystems: Vec<Filesystem>,
 }
 
@@ -146,6 +163,8 @@ pub struct Collector {
     previous_cpu: CpuTimes,
     previous_process_cpu: HashMap<u32, u64>,
     previous_timestamp: Option<SystemTime>,
+    previous_smart_collection: Option<SystemTime>,
+    nvme_smart: Vec<NvmeSmart>,
 }
 
 impl Collector {
@@ -165,6 +184,8 @@ impl Collector {
             previous_cpu: CpuTimes::default(),
             previous_process_cpu: HashMap::new(),
             previous_timestamp: None,
+            previous_smart_collection: None,
+            nvme_smart: Vec::new(),
         }
     }
 
@@ -204,6 +225,14 @@ impl Collector {
         let temperature_alarms = read_temperature_alarms(&self.sys_root);
         let cpu_frequencies = read_cpu_frequencies(&self.sys_root);
         let mains_supplies = read_mains_supplies(&self.sys_root);
+        if self
+            .previous_smart_collection
+            .and_then(|old| now.duration_since(old).ok())
+            .is_none_or(|elapsed| elapsed.as_secs() >= 60)
+        {
+            self.nvme_smart = read_nvme_smart();
+            self.previous_smart_collection = Some(now);
+        }
         let filesystems = read_filesystems(&self.root, &self.filesystem_root);
 
         let mut next_process_cpu = HashMap::new();
@@ -275,6 +304,7 @@ impl Collector {
             temperature_alarms,
             cpu_frequencies,
             mains_supplies,
+            nvme_smart: self.nvme_smart.clone(),
             filesystems,
         })
     }
@@ -703,6 +733,54 @@ fn read_mains_supplies(sys_root: &Path) -> Vec<MainsSupply> {
     }
     supplies.sort_unstable_by(|a, b| a.supply.cmp(&b.supply));
     supplies
+}
+
+fn read_nvme_smart() -> Vec<NvmeSmart> {
+    let Ok(json) = fs::read_to_string("/run/bbtop/nvme-smart.json") else {
+        return Vec::new();
+    };
+    let Some(smart) = json
+        .split_once("\"nvme_smart_health_information_log\"")
+        .map(|(_, rest)| rest)
+    else {
+        return Vec::new();
+    };
+    let Some(percentage_used) = json_u64(smart, "percentage_used") else {
+        return Vec::new();
+    };
+    let Some(available_spare) = json_u64(smart, "available_spare") else {
+        return Vec::new();
+    };
+    vec![NvmeSmart {
+        device: json_string(&json, "name").unwrap_or_else(|| "nvme0".into()),
+        percentage_used,
+        available_spare,
+        available_spare_threshold: json_u64(smart, "available_spare_threshold").unwrap_or(0),
+        critical_warning: json_u64(smart, "critical_warning").unwrap_or(0),
+        data_units_read: json_u64(smart, "data_units_read").unwrap_or(0),
+        data_units_written: json_u64(smart, "data_units_written").unwrap_or(0),
+        power_cycles: json_u64(smart, "power_cycles").unwrap_or(0),
+        power_on_hours: json_u64(smart, "power_on_hours").unwrap_or(0),
+        unsafe_shutdowns: json_u64(smart, "unsafe_shutdowns").unwrap_or(0),
+        media_errors: json_u64(smart, "media_errors").unwrap_or(0),
+        error_log_entries: json_u64(smart, "num_err_log_entries").unwrap_or(0),
+    }]
+}
+
+fn json_u64(input: &str, key: &str) -> Option<u64> {
+    let (_, value) = input.split_once(&format!("\"{key}\":"))?;
+    value
+        .trim_start()
+        .split(|ch: char| !ch.is_ascii_digit())
+        .next()?
+        .parse()
+        .ok()
+}
+
+fn json_string(input: &str, key: &str) -> Option<String> {
+    let (_, value) = input.split_once(&format!("\"{key}\":"))?;
+    let value = value.trim_start().strip_prefix('"')?;
+    Some(value.split_once('"')?.0.into())
 }
 
 fn read_i64(path: &Path) -> Option<i64> {

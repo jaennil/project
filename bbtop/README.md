@@ -80,3 +80,8 @@ For resilient remote collection, systemd units for a high-priority host agent
 and an outbound reverse tunnel are available in [`deploy/systemd`](deploy/systemd).
 The exporter remains bound to localhost; the tunnel exposes it only through an
 internal ClusterIP service in the homelab cluster.
+
+`bbtop-smart.timer` is an optional, separate read-only NVMe SMART collector.
+It runs `smartctl` once per minute as a tightly scoped systemd service and
+writes a world-readable snapshot to `/run/bbtop`; the main exporter receives no
+additional capabilities.
