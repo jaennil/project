@@ -147,6 +147,15 @@
       "targets": [{"expr": "bbtop_laptop_power_estimate_watts", "legendFormat": "laptop draw · {{source}}", "refId": "A"}],
       "title": "Estimated laptop power draw",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 62},
+      "id": 16,
+      "targets": [{"expr": "bbtop_battery_charge_percent", "legendFormat": "{{battery}} · {{status}}", "refId": "A"}],
+      "title": "Battery charge",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",
@@ -157,5 +166,5 @@
   "timezone": "browser",
   "title": "bbtop Linux overview",
   "uid": "bbtop-linux",
-  "version": 4
+  "version": 5
 }

@@ -162,6 +162,11 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
         "# HELP bbtop_laptop_power_estimate_watts Estimated whole-laptop draw while discharging"
     );
     let _ = writeln!(output, "# TYPE bbtop_laptop_power_estimate_watts gauge");
+    let _ = writeln!(
+        output,
+        "# HELP bbtop_battery_charge_percent Battery state of charge in percent"
+    );
+    let _ = writeln!(output, "# TYPE bbtop_battery_charge_percent gauge");
     let mut discharge_watts = 0.0;
     for battery in &snapshot.battery_power {
         let _ = writeln!(
@@ -171,6 +176,15 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
             escape_label(&battery.status),
             battery.watts
         );
+        if let Some(charge_percent) = battery.charge_percent {
+            let _ = writeln!(
+                output,
+                "bbtop_battery_charge_percent{{battery=\"{}\",status=\"{}\"}} {:.3}",
+                escape_label(&battery.battery),
+                escape_label(&battery.status),
+                charge_percent
+            );
+        }
         if battery.status == "Discharging" {
             discharge_watts += battery.watts;
         }
@@ -385,6 +399,7 @@ mod tests {
                 battery: "BATT".into(),
                 status: "Discharging".into(),
                 watts: 22.5,
+                charge_percent: Some(75.0),
             }],
             ..Snapshot::default()
         };
@@ -395,6 +410,9 @@ mod tests {
         assert!(
             rendered.contains("bbtop_laptop_power_estimate_watts{source=\"battery\"} 22.500000")
         );
+        assert!(rendered.contains(
+            "bbtop_battery_charge_percent{battery=\"BATT\",status=\"Discharging\"} 75.000"
+        ));
     }
 
     #[test]

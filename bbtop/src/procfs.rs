@@ -47,6 +47,7 @@ pub struct BatteryPower {
     pub battery: String,
     pub status: String,
     pub watts: f64,
+    pub charge_percent: Option<f64>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -478,6 +479,7 @@ fn read_battery_power(sys_root: &Path) -> Vec<BatteryPower> {
             battery: entry.file_name().to_string_lossy().into_owned(),
             status,
             watts: battery_power_watts(voltage_uv, current_ua),
+            charge_percent: read_i64(&path.join("capacity")).map(|value| value as f64),
         });
     }
     batteries.sort_unstable_by(|a, b| a.battery.cmp(&b.battery));

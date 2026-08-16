@@ -55,6 +55,7 @@ localhost by default.
   and averaged readings as reported by the driver;
 - estimated whole-laptop draw from battery voltage and current while discharging;
   charging systems expose battery charging power but not reliable wall power;
+- battery charge percentage and charging state.
 - task counts and state;
 - bounded top-CPU and top-memory process series with CPU, RSS, virtual memory,
   threads and I/O counters;
