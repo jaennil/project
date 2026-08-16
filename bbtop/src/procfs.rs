@@ -35,6 +35,14 @@ pub struct Temperature {
 }
 
 #[derive(Clone, Debug, Default)]
+pub struct Power {
+    pub chip: String,
+    pub sensor: String,
+    pub reading: String,
+    pub watts: f64,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct Filesystem {
     pub device: String,
     pub mountpoint: String,
@@ -64,6 +72,7 @@ pub struct Snapshot {
     pub processes: Vec<Process>,
     pub fans: Vec<Fan>,
     pub temperatures: Vec<Temperature>,
+    pub power: Vec<Power>,
     pub filesystems: Vec<Filesystem>,
 }
 
@@ -138,6 +147,7 @@ impl Collector {
         );
         let fans = read_fans(&self.sys_root);
         let temperatures = read_temperatures(&self.sys_root);
+        let power = read_power(&self.sys_root);
         let filesystems = read_filesystems(&self.root, &self.filesystem_root);
 
         let mut next_process_cpu = HashMap::new();
@@ -201,6 +211,7 @@ impl Collector {
             processes,
             fans,
             temperatures,
+            power,
             filesystems,
         })
     }
@@ -382,6 +393,51 @@ fn read_temperatures(sys_root: &Path) -> Vec<Temperature> {
     temperatures
 }
 
+fn read_power(sys_root: &Path) -> Vec<Power> {
+    let mut power = Vec::new();
+    let Ok(chips) = fs::read_dir(sys_root.join("class/hwmon")) else {
+        return power;
+    };
+
+    for chip in chips.flatten() {
+        let chip_name = fs::read_to_string(chip.path().join("name"))
+            .unwrap_or_else(|_| "unknown".into())
+            .trim()
+            .to_owned();
+        let Ok(files) = fs::read_dir(chip.path()) else {
+            continue;
+        };
+        for file in files.flatten() {
+            let file_name = file.file_name().to_string_lossy().to_string();
+            let Some((number, reading)) = power_sensor(&file_name) else {
+                continue;
+            };
+            let Ok(value) = fs::read_to_string(file.path()) else {
+                continue;
+            };
+            let Ok(microwatts) = value.trim().parse::<u64>() else {
+                continue;
+            };
+            let label_path = chip.path().join(format!("power{number}_label"));
+            let sensor = fs::read_to_string(label_path)
+                .ok()
+                .map(|label| label.trim().to_owned())
+                .filter(|label| !label.is_empty())
+                .unwrap_or_else(|| format!("power{number}"));
+            power.push(Power {
+                chip: chip_name.clone(),
+                sensor,
+                reading: reading.into(),
+                watts: microwatts as f64 / 1_000_000.0,
+            });
+        }
+    }
+    power.sort_unstable_by(|a, b| {
+        (&a.chip, &a.sensor, &a.reading).cmp(&(&b.chip, &b.sensor, &b.reading))
+    });
+    power
+}
+
 fn fan_sensor_name(file_name: &str) -> Option<String> {
     let number = file_name.strip_prefix("fan")?.strip_suffix("_input")?;
     (!number.is_empty() && number.chars().all(|character| character.is_ascii_digit()))
@@ -391,6 +447,17 @@ fn fan_sensor_name(file_name: &str) -> Option<String> {
 fn temperature_sensor_number(file_name: &str) -> Option<&str> {
     let number = file_name.strip_prefix("temp")?.strip_suffix("_input")?;
     (!number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())).then_some(number)
+}
+
+fn power_sensor(file_name: &str) -> Option<(&str, &str)> {
+    let number = file_name.strip_prefix("power")?;
+    for (suffix, reading) in [("_input", "input"), ("_average", "average")] {
+        if let Some(number) = number.strip_suffix(suffix) {
+            return (!number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit()))
+                .then_some((number, reading));
+        }
+    }
+    None
 }
 
 fn parse_cpu_times(input: &str) -> io::Result<(CpuTimes, usize)> {

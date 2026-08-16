@@ -131,6 +131,27 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
             temperature.celsius
         );
     }
+    metric(
+        &mut output,
+        "bbtop_power_sensors_detected",
+        "gauge",
+        snapshot.power.len(),
+    );
+    let _ = writeln!(
+        output,
+        "# HELP bbtop_power_watts Power reported by Linux hwmon in watts"
+    );
+    let _ = writeln!(output, "# TYPE bbtop_power_watts gauge");
+    for power in &snapshot.power {
+        let _ = writeln!(
+            output,
+            "bbtop_power_watts{{chip=\"{}\",sensor=\"{}\",reading=\"{}\"}} {:.6}",
+            escape_label(&power.chip),
+            escape_label(&power.sensor),
+            escape_label(&power.reading),
+            power.watts
+        );
+    }
     for name in [
         "bbtop_filesystem_size_bytes",
         "bbtop_filesystem_available_bytes",
@@ -257,7 +278,7 @@ fn escape_label(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::procfs::{Filesystem, Process, Temperature};
+    use crate::procfs::{Filesystem, Power, Process, Temperature};
 
     #[test]
     fn escapes_prometheus_labels() {
@@ -308,6 +329,23 @@ mod tests {
         assert!(
             rendered.contains("bbtop_temperature_celsius{chip=\"amdgpu\",sensor=\"edge\"} 64.125")
         );
+    }
+
+    #[test]
+    fn renders_hwmon_power() {
+        let snapshot = Snapshot {
+            power: vec![Power {
+                chip: "amdgpu".into(),
+                sensor: "PPT".into(),
+                reading: "average".into(),
+                watts: 16.053,
+            }],
+            ..Snapshot::default()
+        };
+        let rendered = render_prometheus(&snapshot, 10);
+        assert!(rendered.contains(
+            "bbtop_power_watts{chip=\"amdgpu\",sensor=\"PPT\",reading=\"average\"} 16.053000"
+        ));
     }
 
     #[test]

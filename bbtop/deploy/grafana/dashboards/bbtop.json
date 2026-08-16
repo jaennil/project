@@ -127,6 +127,16 @@
       "targets": [{"expr": "bbtop_temperature_celsius", "legendFormat": "{{chip}} · {{sensor}}", "refId": "A"}],
       "title": "Hardware temperatures",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Power readings exposed by Linux hwmon. This is not whole-laptop wall power unless firmware exports such a sensor.",
+      "fieldConfig": {"defaults": {"min": 0, "unit": "watt"}},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 46},
+      "id": 14,
+      "targets": [{"expr": "bbtop_power_watts", "legendFormat": "{{chip}} · {{sensor}} · {{reading}}", "refId": "A"}],
+      "title": "Hardware power",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",
@@ -137,5 +147,5 @@
   "timezone": "browser",
   "title": "bbtop Linux overview",
   "uid": "bbtop-linux",
-  "version": 2
+  "version": 3
 }

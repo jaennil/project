@@ -51,6 +51,8 @@ localhost by default.
 - filesystem size, used space and available space per mount point;
 - fan speed in RPM when exposed through Linux `hwmon`;
 - temperatures from every Linux `hwmon` sensor, labeled by chip and sensor;
+- power in watts where a Linux `hwmon` driver exposes it, including instantaneous
+  and averaged readings as reported by the driver;
 - task counts and state;
 - bounded top-CPU and top-memory process series with CPU, RSS, virtual memory,
   threads and I/O counters;
