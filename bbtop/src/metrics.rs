@@ -152,6 +152,36 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
             power.watts
         );
     }
+    let _ = writeln!(
+        output,
+        "# HELP bbtop_battery_power_watts Electrical power flowing through the battery"
+    );
+    let _ = writeln!(output, "# TYPE bbtop_battery_power_watts gauge");
+    let _ = writeln!(
+        output,
+        "# HELP bbtop_laptop_power_estimate_watts Estimated whole-laptop draw while discharging"
+    );
+    let _ = writeln!(output, "# TYPE bbtop_laptop_power_estimate_watts gauge");
+    let mut discharge_watts = 0.0;
+    for battery in &snapshot.battery_power {
+        let _ = writeln!(
+            output,
+            "bbtop_battery_power_watts{{battery=\"{}\",status=\"{}\"}} {:.6}",
+            escape_label(&battery.battery),
+            escape_label(&battery.status),
+            battery.watts
+        );
+        if battery.status == "Discharging" {
+            discharge_watts += battery.watts;
+        }
+    }
+    if discharge_watts > 0.0 {
+        let _ = writeln!(
+            output,
+            "bbtop_laptop_power_estimate_watts{{source=\"battery\"}} {:.6}",
+            discharge_watts
+        );
+    }
     for name in [
         "bbtop_filesystem_size_bytes",
         "bbtop_filesystem_available_bytes",
@@ -278,7 +308,7 @@ fn escape_label(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::procfs::{Filesystem, Power, Process, Temperature};
+    use crate::procfs::{BatteryPower, Filesystem, Power, Process, Temperature};
 
     #[test]
     fn escapes_prometheus_labels() {
@@ -346,6 +376,25 @@ mod tests {
         assert!(rendered.contains(
             "bbtop_power_watts{chip=\"amdgpu\",sensor=\"PPT\",reading=\"average\"} 16.053000"
         ));
+    }
+
+    #[test]
+    fn renders_battery_power_and_discharge_estimate() {
+        let snapshot = Snapshot {
+            battery_power: vec![BatteryPower {
+                battery: "BATT".into(),
+                status: "Discharging".into(),
+                watts: 22.5,
+            }],
+            ..Snapshot::default()
+        };
+        let rendered = render_prometheus(&snapshot, 10);
+        assert!(rendered.contains(
+            "bbtop_battery_power_watts{battery=\"BATT\",status=\"Discharging\"} 22.500000"
+        ));
+        assert!(
+            rendered.contains("bbtop_laptop_power_estimate_watts{source=\"battery\"} 22.500000")
+        );
     }
 
     #[test]

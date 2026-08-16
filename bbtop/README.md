@@ -53,6 +53,8 @@ localhost by default.
 - temperatures from every Linux `hwmon` sensor, labeled by chip and sensor;
 - power in watts where a Linux `hwmon` driver exposes it, including instantaneous
   and averaged readings as reported by the driver;
+- estimated whole-laptop draw from battery voltage and current while discharging;
+  charging systems expose battery charging power but not reliable wall power;
 - task counts and state;
 - bounded top-CPU and top-memory process series with CPU, RSS, virtual memory,
   threads and I/O counters;

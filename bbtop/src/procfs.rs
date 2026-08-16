@@ -43,6 +43,13 @@ pub struct Power {
 }
 
 #[derive(Clone, Debug, Default)]
+pub struct BatteryPower {
+    pub battery: String,
+    pub status: String,
+    pub watts: f64,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct Filesystem {
     pub device: String,
     pub mountpoint: String,
@@ -73,6 +80,7 @@ pub struct Snapshot {
     pub fans: Vec<Fan>,
     pub temperatures: Vec<Temperature>,
     pub power: Vec<Power>,
+    pub battery_power: Vec<BatteryPower>,
     pub filesystems: Vec<Filesystem>,
 }
 
@@ -148,6 +156,7 @@ impl Collector {
         let fans = read_fans(&self.sys_root);
         let temperatures = read_temperatures(&self.sys_root);
         let power = read_power(&self.sys_root);
+        let battery_power = read_battery_power(&self.sys_root);
         let filesystems = read_filesystems(&self.root, &self.filesystem_root);
 
         let mut next_process_cpu = HashMap::new();
@@ -212,6 +221,7 @@ impl Collector {
             fans,
             temperatures,
             power,
+            battery_power,
             filesystems,
         })
     }
@@ -436,6 +446,50 @@ fn read_power(sys_root: &Path) -> Vec<Power> {
         (&a.chip, &a.sensor, &a.reading).cmp(&(&b.chip, &b.sensor, &b.reading))
     });
     power
+}
+
+fn read_battery_power(sys_root: &Path) -> Vec<BatteryPower> {
+    let mut batteries = Vec::new();
+    let Ok(entries) = fs::read_dir(sys_root.join("class/power_supply")) else {
+        return batteries;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if fs::read_to_string(path.join("type"))
+            .ok()
+            .as_deref()
+            .map(str::trim)
+            != Some("Battery")
+        {
+            continue;
+        }
+        let Some(voltage_uv) = read_i64(&path.join("voltage_now")) else {
+            continue;
+        };
+        let Some(current_ua) = read_i64(&path.join("current_now")) else {
+            continue;
+        };
+        let status = fs::read_to_string(path.join("status"))
+            .unwrap_or_else(|_| "Unknown".into())
+            .trim()
+            .to_owned();
+        batteries.push(BatteryPower {
+            battery: entry.file_name().to_string_lossy().into_owned(),
+            status,
+            watts: battery_power_watts(voltage_uv, current_ua),
+        });
+    }
+    batteries.sort_unstable_by(|a, b| a.battery.cmp(&b.battery));
+    batteries
+}
+
+fn read_i64(path: &Path) -> Option<i64> {
+    fs::read_to_string(path).ok()?.trim().parse().ok()
+}
+
+fn battery_power_watts(voltage_uv: i64, current_ua: i64) -> f64 {
+    voltage_uv.unsigned_abs() as f64 * current_ua.unsigned_abs() as f64 / 1_000_000_000_000.0
 }
 
 fn fan_sensor_name(file_name: &str) -> Option<String> {

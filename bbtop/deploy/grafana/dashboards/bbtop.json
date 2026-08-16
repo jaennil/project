@@ -130,12 +130,22 @@
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "description": "Power readings exposed by Linux hwmon. This is not whole-laptop wall power unless firmware exports such a sensor.",
+      "description": "Component power from Linux hwmon. The battery series is its charging or discharging power.",
       "fieldConfig": {"defaults": {"min": 0, "unit": "watt"}},
       "gridPos": {"h": 8, "w": 24, "x": 0, "y": 46},
       "id": 14,
-      "targets": [{"expr": "bbtop_power_watts", "legendFormat": "{{chip}} · {{sensor}} · {{reading}}", "refId": "A"}],
+      "targets": [{"expr": "bbtop_power_watts", "legendFormat": "{{chip}} · {{sensor}} · {{reading}}", "refId": "A"}, {"expr": "bbtop_battery_power_watts", "legendFormat": "battery · {{status}}", "refId": "B"}],
       "title": "Hardware power",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Estimated total laptop draw from battery voltage and current. It is available only while the laptop is discharging; it cannot represent charger wall power.",
+      "fieldConfig": {"defaults": {"min": 0, "unit": "watt"}},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 54},
+      "id": 15,
+      "targets": [{"expr": "bbtop_laptop_power_estimate_watts", "legendFormat": "laptop draw · {{source}}", "refId": "A"}],
+      "title": "Estimated laptop power draw",
       "type": "timeseries"
     }
   ],
@@ -147,5 +157,5 @@
   "timezone": "browser",
   "title": "bbtop Linux overview",
   "uid": "bbtop-linux",
-  "version": 3
+  "version": 4
 }
