@@ -10,6 +10,10 @@ RuntimeDirectoryPreserve=yes
 ExecStart=/usr/local/libexec/bbtop-net-collect
 Restart=always
 RestartSec=5
+# BPF memory is charged to the cgroup since Linux 5.11, but bpftrace still tries
+# to raise RLIMIT_MEMLOCK and warns when it cannot. Granting the limit here is
+# cheaper than granting CAP_SYS_RESOURCE.
+LimitMEMLOCK=infinity
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
