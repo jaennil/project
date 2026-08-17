@@ -34,12 +34,17 @@ kretprobe:udp_recvmsg
 }
 
 /* Only the thread group leader marks the end of a process, and a dead process
- * cannot send anything else, so its counters can be dropped. */
+ * cannot send anything else, so its counters can be dropped. Most processes
+ * never touch a socket, and deleting a missing key warns, hence has_key(). */
 tracepoint:sched:sched_process_exit
 /pid == tid/
 {
-    delete(@rx, pid);
-    delete(@tx, pid);
+    if (has_key(@rx, pid)) {
+        delete(@rx, pid);
+    }
+    if (has_key(@tx, pid)) {
+        delete(@tx, pid);
+    }
 }
 
 interval:s:2
