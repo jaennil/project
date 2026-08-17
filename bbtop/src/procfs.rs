@@ -18,6 +18,8 @@ pub struct Process {
     pub threads: u64,
     pub read_bytes: u64,
     pub write_bytes: u64,
+    pub network_receive_bytes: u64,
+    pub network_transmit_bytes: u64,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -234,6 +236,7 @@ impl Collector {
             self.previous_smart_collection = Some(now);
         }
         let filesystems = read_filesystems(&self.root, &self.filesystem_root);
+        let process_network = read_process_network();
 
         let mut next_process_cpu = HashMap::new();
         let mut processes = Vec::new();
@@ -249,6 +252,10 @@ impl Collector {
             if let Some((mut process, cpu_ticks)) = read_process(entry.path(), pid, self.page_size)
             {
                 next_process_cpu.insert(pid, cpu_ticks);
+                if let Some((receive, transmit)) = process_network.get(&pid) {
+                    process.network_receive_bytes = *receive;
+                    process.network_transmit_bytes = *transmit;
+                }
                 if elapsed > 0.0 {
                     let delta = cpu_ticks.saturating_sub(
                         self.previous_process_cpu
@@ -767,6 +774,29 @@ fn read_nvme_smart() -> Vec<NvmeSmart> {
     }]
 }
 
+/// Linux exposes no per-process network counters: `/proc/PID/net/dev` describes
+/// the whole network namespace, not the process reading it. The optional
+/// `bbtop-net` collector traces the socket layer with eBPF and publishes a table
+/// of cumulative payload bytes per PID; without it these counters stay at zero.
+fn read_process_network() -> HashMap<u32, (u64, u64)> {
+    fs::read_to_string("/run/bbtop/process-net.txt")
+        .map(|input| parse_process_network(&input))
+        .unwrap_or_default()
+}
+
+fn parse_process_network(input: &str) -> HashMap<u32, (u64, u64)> {
+    input
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let pid = fields.next()?.parse().ok()?;
+            let receive = fields.next()?.parse().ok()?;
+            let transmit = fields.next()?.parse().ok()?;
+            Some((pid, (receive, transmit)))
+        })
+        .collect()
+}
+
 fn json_u64(input: &str, key: &str) -> Option<u64> {
     let (_, value) = input.split_once(&format!("\"{key}\":"))?;
     value
@@ -963,6 +993,8 @@ fn read_process(path: PathBuf, pid: u32, page_size: u64) -> Option<(Process, u64
             threads,
             read_bytes,
             write_bytes,
+            network_receive_bytes: 0,
+            network_transmit_bytes: 0,
         },
         user_ticks + system_ticks,
     ))
@@ -1012,6 +1044,13 @@ mod tests {
         assert_eq!(fan_sensor_name("fan12_input").as_deref(), Some("fan12"));
         assert_eq!(fan_sensor_name("fan1_min"), None);
         assert_eq!(fan_sensor_name("temp1_input"), None);
+    }
+
+    #[test]
+    fn parses_process_network_table() {
+        let table = parse_process_network("# pid receive_bytes transmit_bytes\n42 100 200\nbad\n");
+        assert_eq!(table[&42], (100, 200));
+        assert_eq!(table.len(), 1);
     }
 
     #[test]

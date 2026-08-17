@@ -309,6 +309,8 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
         "bbtop_process_state",
         "bbtop_process_read_bytes_total",
         "bbtop_process_write_bytes_total",
+        "bbtop_process_network_receive_bytes_total",
+        "bbtop_process_network_transmit_bytes_total",
     ] {
         let kind = if name.ends_with("_total") {
             "counter"
@@ -326,6 +328,19 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
     let mut by_memory: Vec<_> = snapshot.processes.iter().collect();
     by_memory.sort_unstable_by_key(|process| Reverse(process.rss_bytes));
     for process in by_memory.into_iter().take(process_limit) {
+        if pids.insert(process.pid) {
+            selected.push(process);
+        }
+    }
+    // A process can saturate a link while barely registering on CPU or memory,
+    // so network talkers get their own ranking. Processes without traced bytes
+    // add nothing but cardinality, and the ranking is descending, so stop early.
+    let mut by_network: Vec<_> = snapshot.processes.iter().collect();
+    by_network.sort_unstable_by_key(|process| Reverse(process_network_bytes(process)));
+    for process in by_network.into_iter().take(process_limit) {
+        if process_network_bytes(process) == 0 {
+            break;
+        }
         if pids.insert(process.pid) {
             selected.push(process);
         }
@@ -371,8 +386,24 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
             "bbtop_process_write_bytes_total{{{labels}}} {}",
             process.write_bytes
         );
+        let _ = writeln!(
+            output,
+            "bbtop_process_network_receive_bytes_total{{{labels}}} {}",
+            process.network_receive_bytes
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_process_network_transmit_bytes_total{{{labels}}} {}",
+            process.network_transmit_bytes
+        );
     }
     output
+}
+
+fn process_network_bytes(process: &crate::procfs::Process) -> u64 {
+    process
+        .network_receive_bytes
+        .saturating_add(process.network_transmit_bytes)
 }
 
 fn metric(output: &mut String, name: &str, kind: &str, value: impl std::fmt::Display) {
@@ -606,5 +637,38 @@ mod tests {
         let rendered = render_prometheus(&snapshot, 1);
         assert!(rendered.contains("pid=\"1\",name=\"cpu\""));
         assert!(rendered.contains("pid=\"2\",name=\"memory\""));
+    }
+
+    #[test]
+    fn exports_network_talkers_that_are_idle_otherwise() {
+        let snapshot = Snapshot {
+            processes: vec![
+                Process {
+                    pid: 1,
+                    name: "cpu".into(),
+                    cpu_percent: 99.0,
+                    rss_bytes: 1_000_000,
+                    ..Process::default()
+                },
+                Process {
+                    pid: 2,
+                    name: "downloader".into(),
+                    network_receive_bytes: 4_000,
+                    network_transmit_bytes: 100,
+                    ..Process::default()
+                },
+                Process {
+                    pid: 3,
+                    name: "silent".into(),
+                    ..Process::default()
+                },
+            ],
+            ..Snapshot::default()
+        };
+        let rendered = render_prometheus(&snapshot, 1);
+        assert!(rendered.contains(
+            "bbtop_process_network_receive_bytes_total{pid=\"2\",name=\"downloader\"} 4000"
+        ));
+        assert!(!rendered.contains("name=\"silent\""));
     }
 }
