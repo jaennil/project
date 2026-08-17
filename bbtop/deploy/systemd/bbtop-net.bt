@@ -1,0 +1,50 @@
+#!/usr/bin/env bpftrace
+/*
+ * Per-process network accounting for bbtop.
+ *
+ * tcp_sendmsg(sk, msg, size) and udp_sendmsg(sk, msg, len) carry the payload
+ * length in the third argument. tcp_cleanup_rbuf(sk, copied) reports what a TCP
+ * socket handed to userspace, and udp_recvmsg() returns the same for UDP. All
+ * four run in the context of the process that issued the syscall, so the bytes
+ * are charged to the process that asked for them. These are payload bytes:
+ * protocol headers, retransmits and kernel-internal traffic are excluded, so
+ * the sum over processes stays below the interface counters in /proc/net/dev.
+ *
+ * Keys are process IDs alone. bbtop already knows every process name from
+ * procfs, and resolving it there keeps these maps small and their dump trivial
+ * to parse.
+ */
+
+kprobe:tcp_sendmsg,
+kprobe:udp_sendmsg
+{
+    @tx[pid] = sum(arg2);
+}
+
+kprobe:tcp_cleanup_rbuf
+/(int32)arg1 > 0/
+{
+    @rx[pid] = sum((int32)arg1);
+}
+
+kretprobe:udp_recvmsg
+/(int32)retval > 0/
+{
+    @rx[pid] = sum((int32)retval);
+}
+
+/* Only the thread group leader marks the end of a process, and a dead process
+ * cannot send anything else, so its counters can be dropped. */
+tracepoint:sched:sched_process_exit
+/pid == tid/
+{
+    delete(@rx, pid);
+    delete(@tx, pid);
+}
+
+interval:s:2
+{
+    print(@rx);
+    print(@tx);
+    printf("snapshot-end\n");
+}

@@ -1,0 +1,23 @@
+[Unit]
+Description=bbtop per-process network throughput collector
+After=local-fs.target
+
+[Service]
+Type=simple
+RuntimeDirectory=bbtop
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/local/libexec/bbtop-net-collect
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=CAP_BPF CAP_PERFMON
+
+[Install]
+WantedBy=multi-user.target
