@@ -22,6 +22,7 @@ struct Config {
     process_limit: usize,
     proc_root: PathBuf,
     filesystem_root: PathBuf,
+    runtime_root: PathBuf,
     tui: bool,
 }
 
@@ -37,6 +38,11 @@ impl Default for Config {
             filesystem_root: env::var_os("BBTOP_FILESYSTEM_ROOT")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("/")),
+            // Where the privileged helpers publish the readings the exporter
+            // cannot take itself: NVMe SMART and per-process network bytes.
+            runtime_root: env::var_os("BBTOP_RUNTIME_ROOT")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("/run/bbtop")),
             tui: true,
         }
     }
@@ -114,9 +120,10 @@ fn main() -> ExitCode {
     let collector_state = Arc::clone(&state);
     let proc_root = config.proc_root.clone();
     let filesystem_root = config.filesystem_root.clone();
+    let runtime_root = config.runtime_root.clone();
     let interval = config.interval;
     thread::spawn(move || {
-        let mut collector = Collector::with_filesystem_root(proc_root, filesystem_root);
+        let mut collector = Collector::new(proc_root, filesystem_root, runtime_root);
         loop {
             let started = Instant::now();
             match collector.collect() {

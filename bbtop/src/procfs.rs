@@ -160,6 +160,7 @@ pub struct Collector {
     root: PathBuf,
     sys_root: PathBuf,
     filesystem_root: PathBuf,
+    runtime_root: PathBuf,
     ticks_per_second: f64,
     page_size: u64,
     previous_cpu: CpuTimes,
@@ -170,7 +171,7 @@ pub struct Collector {
 }
 
 impl Collector {
-    pub fn with_filesystem_root(root: PathBuf, filesystem_root: PathBuf) -> Self {
+    pub fn new(root: PathBuf, filesystem_root: PathBuf, runtime_root: PathBuf) -> Self {
         let page_size = detect_page_size(&root);
         let sys_root = if root == Path::new("/proc") {
             PathBuf::from("/sys")
@@ -181,6 +182,7 @@ impl Collector {
             root,
             sys_root,
             filesystem_root,
+            runtime_root,
             ticks_per_second: 100.0,
             page_size,
             previous_cpu: CpuTimes::default(),
@@ -232,11 +234,11 @@ impl Collector {
             .and_then(|old| now.duration_since(old).ok())
             .is_none_or(|elapsed| elapsed.as_secs() >= 60)
         {
-            self.nvme_smart = read_nvme_smart();
+            self.nvme_smart = read_nvme_smart(&self.runtime_root);
             self.previous_smart_collection = Some(now);
         }
         let filesystems = read_filesystems(&self.root, &self.filesystem_root);
-        let process_network = read_process_network();
+        let process_network = read_process_network(&self.runtime_root);
 
         let mut next_process_cpu = HashMap::new();
         let mut processes = Vec::new();
@@ -742,8 +744,8 @@ fn read_mains_supplies(sys_root: &Path) -> Vec<MainsSupply> {
     supplies
 }
 
-fn read_nvme_smart() -> Vec<NvmeSmart> {
-    let Ok(json) = fs::read_to_string("/run/bbtop/nvme-smart.json") else {
+fn read_nvme_smart(runtime_root: &Path) -> Vec<NvmeSmart> {
+    let Ok(json) = fs::read_to_string(runtime_root.join("nvme-smart.json")) else {
         return Vec::new();
     };
     let Some(smart) = json
@@ -778,8 +780,8 @@ fn read_nvme_smart() -> Vec<NvmeSmart> {
 /// the whole network namespace, not the process reading it. The optional
 /// `bbtop-net` collector traces the socket layer with eBPF and publishes a table
 /// of cumulative payload bytes per PID; without it these counters stay at zero.
-fn read_process_network() -> HashMap<u32, (u64, u64)> {
-    fs::read_to_string("/run/bbtop/process-net.txt")
+fn read_process_network(runtime_root: &Path) -> HashMap<u32, (u64, u64)> {
+    fs::read_to_string(runtime_root.join("process-net.txt"))
         .map(|input| parse_process_network(&input))
         .unwrap_or_default()
 }
