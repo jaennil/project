@@ -14,6 +14,7 @@ enum SortBy {
     Memory,
     Read,
     Write,
+    Network,
     Pid,
 }
 
@@ -65,6 +66,7 @@ pub fn run(state: Arc<RwLock<Snapshot>>, listen: &str, interval: Duration) -> io
                 b'm' => SortBy::Memory,
                 b'r' => SortBy::Read,
                 b'w' => SortBy::Write,
+                b'n' => SortBy::Network,
                 b'p' => SortBy::Pid,
                 _ => sort,
             };
@@ -82,6 +84,7 @@ fn draw(snapshot: &Snapshot, listen: &str, sort: SortBy) -> io::Result<()> {
         SortBy::Memory => b.rss_bytes.cmp(&a.rss_bytes),
         SortBy::Read => b.read_bytes.cmp(&a.read_bytes),
         SortBy::Write => b.write_bytes.cmp(&a.write_bytes),
+        SortBy::Network => network_bytes(b).cmp(&network_bytes(a)),
         SortBy::Pid => a.pid.cmp(&b.pid),
     });
     let used_memory = snapshot
@@ -121,7 +124,9 @@ fn draw(snapshot: &Snapshot, listen: &str, sort: SortBy) -> io::Result<()> {
         snapshot.processes_total,
         snapshot.processes_running
     ));
-    output.push_str("\x1b[1m     PID S    CPU%      RSS     READ    WRITE  NAME\x1b[0m\n");
+    output.push_str(
+        "\x1b[1m     PID S    CPU%      RSS     READ    WRITE    NETRX    NETTX  NAME\x1b[0m\n",
+    );
     let rows = height.saturating_sub(9);
     for process in processes.iter().take(rows) {
         output.push_str(&process_row(process, width));
@@ -129,25 +134,34 @@ fn draw(snapshot: &Snapshot, listen: &str, sort: SortBy) -> io::Result<()> {
     while output.bytes().filter(|byte| *byte == b'\n').count() < height.saturating_sub(1) {
         output.push('\n');
     }
-    output.push_str("\x1b[7m q quit │ sort: c cpu  m memory  r read  w write  p pid \x1b[0m");
+    output
+        .push_str("\x1b[7m q quit │ sort: c cpu  m memory  r read  w write  n net  p pid \x1b[0m");
     print!("{output}");
     io::stdout().flush()
 }
 
 fn process_row(process: &Process, width: usize) -> String {
-    let fixed = 48;
+    let fixed = 66;
     let name_width = width.saturating_sub(fixed).max(8);
     let name: String = process.name.chars().take(name_width).collect();
     format!(
-        " {:>7} {} {:>7.1} {:>8} {:>8} {:>8}  {}\n",
+        " {:>7} {} {:>7.1} {:>8} {:>8} {:>8} {:>8} {:>8}  {}\n",
         process.pid,
         process.state,
         process.cpu_percent,
         bytes(process.rss_bytes),
         bytes(process.read_bytes),
         bytes(process.write_bytes),
+        bytes(process.network_receive_bytes),
+        bytes(process.network_transmit_bytes),
         name
     )
+}
+
+fn network_bytes(process: &Process) -> u64 {
+    process
+        .network_receive_bytes
+        .saturating_add(process.network_transmit_bytes)
 }
 
 fn terminal_size() -> (usize, usize) {
