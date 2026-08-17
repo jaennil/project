@@ -8,7 +8,7 @@
       "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}},
       "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
       "id": 1,
-      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}},
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull", "mean", "max"], "values": false}},
       "targets": [{"expr": "bbtop_cpu_usage_percent", "legendFormat": "CPU", "refId": "A"}],
       "title": "CPU usage",
       "type": "stat"
@@ -18,7 +18,7 @@
       "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}},
       "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
       "id": 2,
-      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}},
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull", "mean", "max"], "values": false}},
       "targets": [{"expr": "100 * (1 - bbtop_memory_available_bytes / bbtop_memory_total_bytes)", "legendFormat": "Memory", "refId": "A"}],
       "title": "Memory usage",
       "type": "stat"
@@ -28,7 +28,7 @@
       "fieldConfig": {"defaults": {"unit": "short"}},
       "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
       "id": 3,
-      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}},
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull", "mean", "max"], "values": false}},
       "targets": [{"expr": "bbtop_processes", "legendFormat": "all", "refId": "A"}, {"expr": "bbtop_processes_running", "legendFormat": "running", "refId": "B"}],
       "title": "Processes",
       "type": "stat"
@@ -48,6 +48,7 @@
       "fieldConfig": {"defaults": {"unit": "percent"}},
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
       "id": 5,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "bbtop_cpu_usage_percent", "legendFormat": "CPU", "refId": "A"}],
       "title": "CPU history",
       "type": "timeseries"
@@ -57,6 +58,7 @@
       "fieldConfig": {"defaults": {"unit": "bytes"}},
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
       "id": 6,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "bbtop_memory_total_bytes - bbtop_memory_available_bytes", "legendFormat": "used", "refId": "A"}, {"expr": "bbtop_memory_available_bytes", "legendFormat": "available", "refId": "B"}],
       "title": "Memory history",
       "type": "timeseries"
@@ -66,6 +68,7 @@
       "fieldConfig": {"defaults": {"unit": "Bps"}},
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13},
       "id": 7,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "rate(bbtop_network_receive_bytes_total[$__rate_interval])", "legendFormat": "receive", "refId": "A"}, {"expr": "rate(bbtop_network_transmit_bytes_total[$__rate_interval])", "legendFormat": "transmit", "refId": "B"}],
       "title": "Network throughput",
       "type": "timeseries"
@@ -75,6 +78,7 @@
       "fieldConfig": {"defaults": {"max": 3500000000, "min": 0, "unit": "Bps", "custom": {"thresholdsStyle": {"mode": "line"}}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 2450000000}, {"color": "red", "value": 3150000000}]}}},
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13},
       "id": 8,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "rate(bbtop_disk_read_bytes_total[$__rate_interval])", "legendFormat": "read", "refId": "A"}, {"expr": "rate(bbtop_disk_write_bytes_total[$__rate_interval])", "legendFormat": "write", "refId": "B"}],
       "description": "Current PCIe 3.0 x4 link ceiling is approximately 3.5 GB/s. Thresholds: 70% and 90%.",
       "title": "Disk throughput · max ≈ 3.5 GB/s",
@@ -85,6 +89,7 @@
       "fieldConfig": {"defaults": {"unit": "percent"}},
       "gridPos": {"h": 9, "w": 12, "x": 0, "y": 21},
       "id": 9,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "topk(10, bbtop_process_cpu_usage_percent)", "legendFormat": "{{name}} ({{pid}})", "refId": "A"}],
       "title": "Top process CPU",
       "type": "timeseries"
@@ -94,6 +99,7 @@
       "fieldConfig": {"defaults": {"unit": "bytes"}},
       "gridPos": {"h": 9, "w": 12, "x": 12, "y": 21},
       "id": 10,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "topk(10, bbtop_process_resident_memory_bytes)", "legendFormat": "{{name}} ({{pid}})", "refId": "A"}],
       "title": "Top process memory",
       "type": "timeseries"
@@ -104,6 +110,7 @@
       "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}},
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 30},
       "id": 12,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "100 * bbtop_filesystem_used_bytes / bbtop_filesystem_size_bytes", "legendFormat": "{{mountpoint}} · {{device}}", "refId": "A"}],
       "title": "Filesystem usage",
       "type": "timeseries"
@@ -114,6 +121,7 @@
       "fieldConfig": {"defaults": {"min": 0, "unit": "rpm"}},
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 30},
       "id": 11,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "bbtop_fan_speed_rpm", "legendFormat": "{{chip}} · {{sensor}}", "refId": "A"}],
       "title": "Fan speed",
       "type": "timeseries"
@@ -124,6 +132,7 @@
       "fieldConfig": {"defaults": {"min": 0, "unit": "celsius"}},
       "gridPos": {"h": 8, "w": 24, "x": 0, "y": 38},
       "id": 13,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "bbtop_temperature_celsius", "legendFormat": "{{chip}} · {{sensor}}", "refId": "A"}],
       "title": "Hardware temperatures",
       "type": "timeseries"
@@ -134,6 +143,7 @@
       "fieldConfig": {"defaults": {"min": 0, "unit": "watt"}},
       "gridPos": {"h": 8, "w": 24, "x": 0, "y": 46},
       "id": 14,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "bbtop_power_watts", "legendFormat": "{{chip}} · {{sensor}} · {{reading}}", "refId": "A"}, {"expr": "bbtop_battery_power_watts", "legendFormat": "battery · {{status}}", "refId": "B"}],
       "title": "Hardware power",
       "type": "timeseries"
@@ -143,6 +153,7 @@
       "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}},
       "gridPos": {"h": 8, "w": 24, "x": 0, "y": 54},
       "id": 16,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "bbtop_battery_charge_percent", "legendFormat": "{{battery}} · {{status}}", "refId": "A"}],
       "title": "Battery charge",
       "type": "timeseries"
@@ -152,6 +163,7 @@
       "fieldConfig": {"defaults": {"min": 0, "unit": "volt"}},
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 62},
       "id": 17,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "bbtop_voltage_volts", "legendFormat": "{{chip}} · {{sensor}}", "refId": "A"}],
       "title": "Hardware voltages",
       "type": "timeseries"
@@ -161,6 +173,7 @@
       "fieldConfig": {"defaults": {"min": 0, "unit": "amp"}},
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 62},
       "id": 18,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "bbtop_current_amperes", "legendFormat": "{{chip}} · {{sensor}}", "refId": "A"}],
       "title": "Hardware currents",
       "type": "timeseries"
@@ -171,6 +184,7 @@
       "fieldConfig": {"defaults": {"min": 0, "unit": "celsius"}},
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 70},
       "id": 19,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "bbtop_temperature_limit_celsius", "legendFormat": "{{chip}} · {{sensor}} · {{limit}}", "refId": "A"}],
       "title": "Temperature safety limits",
       "type": "timeseries"
@@ -180,6 +194,7 @@
       "fieldConfig": {"defaults": {"min": 0, "unit": "hertz"}},
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 70},
       "id": 20,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "bbtop_cpu_frequency_hertz", "legendFormat": "CPU {{cpu}}", "refId": "A"}],
       "title": "CPU frequency per core",
       "type": "timeseries"
@@ -190,6 +205,7 @@
       "fieldConfig": {"defaults": {"max": 1, "min": 0, "unit": "bool_on_off", "custom": {"lineInterpolation": "stepAfter", "lineWidth": 2, "fillOpacity": 25, "showPoints": "never", "spanNulls": true}}},
       "gridPos": {"h": 5, "w": 24, "x": 0, "y": 78},
       "id": 21,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean"]}},
       "targets": [{"expr": "bbtop_mains_online", "legendFormat": "{{supply}}", "refId": "A"}],
       "title": "External power connected",
       "type": "timeseries"
@@ -199,6 +215,7 @@
       "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}},
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 83},
       "id": 22,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "bbtop_nvme_percentage_used", "legendFormat": "{{device}} · used", "refId": "A"}, {"expr": "bbtop_nvme_available_spare_percent", "legendFormat": "{{device}} · spare", "refId": "B"}],
       "title": "NVMe health",
       "type": "timeseries"
@@ -208,6 +225,7 @@
       "fieldConfig": {"defaults": {"min": 0, "unit": "short"}},
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 83},
       "id": 23,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "bbtop_nvme_media_errors_total", "legendFormat": "{{device}} · media errors", "refId": "A"}, {"expr": "bbtop_nvme_error_log_entries_total", "legendFormat": "{{device}} · error log", "refId": "B"}, {"expr": "bbtop_nvme_unsafe_shutdowns_total", "legendFormat": "{{device}} · unsafe shutdowns", "refId": "C"}],
       "title": "NVMe errors and unsafe shutdowns",
       "type": "timeseries"
@@ -218,6 +236,7 @@
       "fieldConfig": {"defaults": {"min": 0, "unit": "Bps"}},
       "gridPos": {"h": 9, "w": 24, "x": 0, "y": 91},
       "id": 24,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "topk(10, rate(bbtop_process_read_bytes_total[$__rate_interval]))", "legendFormat": "read · {{name}} ({{pid}})", "refId": "A"}, {"expr": "topk(10, rate(bbtop_process_write_bytes_total[$__rate_interval]))", "legendFormat": "write · {{name}} ({{pid}})", "refId": "B"}],
       "title": "Top process disk I/O",
       "type": "timeseries"
@@ -228,6 +247,7 @@
       "fieldConfig": {"defaults": {"min": 0, "unit": "Bps"}},
       "gridPos": {"h": 9, "w": 24, "x": 0, "y": 100},
       "id": 25,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "topk(10, rate(bbtop_process_network_receive_bytes_total[$__rate_interval]))", "legendFormat": "rx · {{name}} ({{pid}})", "refId": "A"}, {"expr": "topk(10, rate(bbtop_process_network_transmit_bytes_total[$__rate_interval]))", "legendFormat": "tx · {{name}} ({{pid}})", "refId": "B"}],
       "title": "Top process network I/O",
       "type": "timeseries"
@@ -241,5 +261,5 @@
   "timezone": "browser",
   "title": "bbtop Linux overview",
   "uid": "bbtop-linux",
-  "version": 11
+  "version": 12
 }
