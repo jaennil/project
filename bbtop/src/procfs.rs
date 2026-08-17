@@ -23,6 +23,17 @@ pub struct Process {
 }
 
 #[derive(Clone, Debug, Default)]
+pub struct NetworkInterface {
+    pub name: String,
+    /// `physical` when the kernel backs the interface with a real device.
+    /// Bridges, tunnels and loopback are `virtual` and carry copies of traffic
+    /// that its uplink counts again, so summing every interface triple counts.
+    pub kind: String,
+    pub receive_bytes: u64,
+    pub transmit_bytes: u64,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct Fan {
     pub chip: String,
     pub sensor: String,
@@ -125,6 +136,7 @@ pub struct Snapshot {
     pub uptime: f64,
     pub network_receive_bytes: u64,
     pub network_transmit_bytes: u64,
+    pub networks: Vec<NetworkInterface>,
     pub disk_read_bytes: u64,
     pub disk_write_bytes: u64,
     pub processes_total: usize,
@@ -213,8 +225,11 @@ impl Collector {
         let memory = parse_meminfo(&meminfo);
         let load = parse_loadavg(&fs::read_to_string(self.root.join("loadavg"))?);
         let uptime = first_number(&fs::read_to_string(self.root.join("uptime"))?).unwrap_or(0.0);
-        let (network_receive_bytes, network_transmit_bytes) =
-            parse_net_dev(&fs::read_to_string(self.root.join("net/dev"))?);
+        let networks = read_networks(
+            &fs::read_to_string(self.root.join("net/dev"))?,
+            &self.sys_root,
+        );
+        let (network_receive_bytes, network_transmit_bytes) = physical_totals(&networks);
         let (disk_read_bytes, disk_write_bytes) = parse_diskstats(
             &fs::read_to_string(self.root.join("diskstats"))?,
             &self.sys_root,
@@ -295,6 +310,7 @@ impl Collector {
             uptime,
             network_receive_bytes,
             network_transmit_bytes,
+            networks,
             disk_read_bytes,
             disk_write_bytes,
             processes_total: processes.len(),
@@ -922,20 +938,63 @@ fn first_number(input: &str) -> Option<f64> {
     input.split_whitespace().next()?.parse().ok()
 }
 
-fn parse_net_dev(input: &str) -> (u64, u64) {
-    input.lines().filter_map(|line| line.split_once(':')).fold(
-        (0, 0),
-        |(receive, transmit), (_, fields)| {
+fn read_networks(input: &str, sys_root: &Path) -> Vec<NetworkInterface> {
+    let mut interfaces = parse_net_dev(input);
+    for interface in &mut interfaces {
+        interface.kind = if sys_root
+            .join("class/net")
+            .join(&interface.name)
+            .join("device")
+            .exists()
+        {
+            "physical".into()
+        } else {
+            "virtual".into()
+        };
+    }
+    interfaces
+}
+
+/// Every interface gets its own series so that a counter reset stays local to
+/// it. Summing them into one number made a container teardown look like a
+/// multi-gigabyte burst: the total dropped with the departing interface, and
+/// Prometheus reads a falling counter as a restart. Veth pairs are skipped
+/// because each container lifetime would otherwise leave a dead series behind.
+fn parse_net_dev(input: &str) -> Vec<NetworkInterface> {
+    let mut interfaces: Vec<NetworkInterface> = input
+        .lines()
+        .filter_map(|line| {
+            let (name, fields) = line.split_once(':')?;
+            let name = name.trim();
+            if name.is_empty() || name.starts_with("veth") {
+                return None;
+            }
             let values: Vec<u64> = fields
                 .split_whitespace()
                 .filter_map(|value| value.parse().ok())
                 .collect();
+            Some(NetworkInterface {
+                name: name.to_owned(),
+                kind: String::new(),
+                receive_bytes: values.first().copied().unwrap_or(0),
+                transmit_bytes: values.get(8).copied().unwrap_or(0),
+            })
+        })
+        .collect();
+    interfaces.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+    interfaces
+}
+
+fn physical_totals(interfaces: &[NetworkInterface]) -> (u64, u64) {
+    interfaces
+        .iter()
+        .filter(|interface| interface.kind == "physical")
+        .fold((0, 0), |(receive, transmit), interface| {
             (
-                receive + values.first().copied().unwrap_or(0),
-                transmit + values.get(8).copied().unwrap_or(0),
+                receive + interface.receive_bytes,
+                transmit + interface.transmit_bytes,
             )
-        },
-    )
+        })
 }
 
 fn parse_diskstats(input: &str, sys_root: &Path) -> (u64, u64) {
@@ -1036,9 +1095,40 @@ mod tests {
     }
 
     #[test]
-    fn parses_network_totals() {
-        let input = "Inter-| Receive | Transmit\n eth0: 10 0 0 0 0 0 0 0 20 0 0 0 0 0 0 0\n";
-        assert_eq!(parse_net_dev(input), (10, 20));
+    fn parses_network_interfaces_and_skips_veth() {
+        let input = "Inter-| Receive | Transmit\n \
+             eth0: 10 0 0 0 0 0 0 0 20 0 0 0 0 0 0 0\n \
+             veth1234@if2: 30 0 0 0 0 0 0 0 40 0 0 0 0 0 0 0\n \
+             lo: 50 0 0 0 0 0 0 0 60 0 0 0 0 0 0 0\n";
+        let interfaces = parse_net_dev(input);
+        assert_eq!(
+            interfaces
+                .iter()
+                .map(|interface| interface.name.as_str())
+                .collect::<Vec<_>>(),
+            ["eth0", "lo"]
+        );
+        assert_eq!(interfaces[0].receive_bytes, 10);
+        assert_eq!(interfaces[0].transmit_bytes, 20);
+    }
+
+    #[test]
+    fn totals_count_physical_interfaces_only() {
+        let interfaces = vec![
+            NetworkInterface {
+                name: "eth0".into(),
+                kind: "physical".into(),
+                receive_bytes: 10,
+                transmit_bytes: 20,
+            },
+            NetworkInterface {
+                name: "docker0".into(),
+                kind: "virtual".into(),
+                receive_bytes: 1_000,
+                transmit_bytes: 2_000,
+            },
+        ];
+        assert_eq!(physical_totals(&interfaces), (10, 20));
     }
 
     #[test]

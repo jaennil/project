@@ -47,7 +47,8 @@ localhost by default.
 
 - aggregate CPU, logical CPUs, load averages and uptime;
 - total, available and swap memory;
-- network and block-device byte counters;
+- network byte counters per interface, labeled `physical` or `virtual`, and
+  block-device byte counters;
 - filesystem size, used space and available space per mount point;
 - fan speed in RPM when exposed through Linux `hwmon`;
 - temperatures from every Linux `hwmon` sensor, labeled by chip and sensor;
@@ -66,6 +67,15 @@ localhost by default.
 Prometheus owns historical retention and rate calculation. In particular,
 network and disk values are counters, so dashboards use `rate()` instead of
 storing a second copy of history in the agent.
+
+Network counters are exported one series per interface rather than as a single
+host total. A total would drop whenever an interface goes away - a container
+teardown is enough - and a falling counter reads as a restart, which Prometheus
+turns into a burst of several gigabytes that never happened. Rate each
+interface, then sum. Veth pairs are skipped because each container lifetime
+would leave another dead series behind, and dashboards should sum only
+`kind="physical"`: bridges and tunnels carry copies of traffic that their
+uplink counts again.
 
 ## Scope
 

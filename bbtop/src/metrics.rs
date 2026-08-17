@@ -49,18 +49,25 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
         "gauge",
         snapshot.uptime,
     );
-    metric(
-        &mut output,
-        "bbtop_network_receive_bytes_total",
-        "counter",
-        snapshot.network_receive_bytes,
-    );
-    metric(
-        &mut output,
-        "bbtop_network_transmit_bytes_total",
-        "counter",
-        snapshot.network_transmit_bytes,
-    );
+    let _ = writeln!(output, "# TYPE bbtop_network_receive_bytes_total counter");
+    let _ = writeln!(output, "# TYPE bbtop_network_transmit_bytes_total counter");
+    for interface in &snapshot.networks {
+        let labels = format!(
+            "interface=\"{}\",kind=\"{}\"",
+            escape_label(&interface.name),
+            interface.kind
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_network_receive_bytes_total{{{labels}}} {}",
+            interface.receive_bytes
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_network_transmit_bytes_total{{{labels}}} {}",
+            interface.transmit_bytes
+        );
+    }
     metric(
         &mut output,
         "bbtop_disk_read_bytes_total",
@@ -637,6 +644,34 @@ mod tests {
         let rendered = render_prometheus(&snapshot, 1);
         assert!(rendered.contains("pid=\"1\",name=\"cpu\""));
         assert!(rendered.contains("pid=\"2\",name=\"memory\""));
+    }
+
+    #[test]
+    fn renders_one_series_per_network_interface() {
+        let snapshot = Snapshot {
+            networks: vec![
+                crate::procfs::NetworkInterface {
+                    name: "wlp2s0".into(),
+                    kind: "physical".into(),
+                    receive_bytes: 10,
+                    transmit_bytes: 20,
+                },
+                crate::procfs::NetworkInterface {
+                    name: "docker0".into(),
+                    kind: "virtual".into(),
+                    receive_bytes: 30,
+                    transmit_bytes: 40,
+                },
+            ],
+            ..Snapshot::default()
+        };
+        let rendered = render_prometheus(&snapshot, 1);
+        assert!(rendered.contains(
+            "bbtop_network_receive_bytes_total{interface=\"wlp2s0\",kind=\"physical\"} 10"
+        ));
+        assert!(rendered.contains(
+            "bbtop_network_transmit_bytes_total{interface=\"docker0\",kind=\"virtual\"} 40"
+        ));
     }
 
     #[test]
