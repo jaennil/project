@@ -231,6 +231,16 @@
       "targets": [{"expr": "topk(10, rate(bbtop_process_read_bytes_total[$__rate_interval]))", "legendFormat": "read · {{name}} ({{pid}})", "refId": "A"}, {"expr": "topk(10, rate(bbtop_process_write_bytes_total[$__rate_interval]))", "legendFormat": "write · {{name}} ({{pid}})", "refId": "B"}],
       "title": "Top process disk I/O",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Per-process network throughput traced at the socket layer by the bbtop-net eBPF collector. Payload bytes only: protocol headers, retransmits and kernel traffic are excluded, so these series stay below the interface counters.",
+      "fieldConfig": {"defaults": {"min": 0, "unit": "Bps"}},
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 108},
+      "id": 25,
+      "targets": [{"expr": "topk(10, rate(bbtop_process_network_receive_bytes_total[$__rate_interval]))", "legendFormat": "rx · {{name}} ({{pid}})", "refId": "A"}, {"expr": "topk(10, rate(bbtop_process_network_transmit_bytes_total[$__rate_interval]))", "legendFormat": "tx · {{name}} ({{pid}})", "refId": "B"}],
+      "title": "Top process network I/O",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",
