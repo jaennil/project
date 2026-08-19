@@ -152,7 +152,7 @@
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}},
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 54},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 54},
       "id": 16,
       "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
       "targets": [{"expr": "bbtop_battery_charge_percent{instance=\"$host\"}", "legendFormat": "{{battery}} · {{status}}", "refId": "A"}],
@@ -296,6 +296,17 @@
       "targets": [{"expr": "topk(10, bbtop_process_gpu_vram_bytes{instance=\"$host\"})", "legendFormat": "{{name}} ({{pid}})", "refId": "A"}],
       "title": "Top process VRAM",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "How fast the battery is filling or draining, as the slope of its state of charge. Positive is charging. The pace is set by the laptop's own charge controller, so a bigger charger does not move it.",
+      "fieldConfig": {"defaults": {"unit": "suffix: %/h", "custom": {"fillOpacity": 10, "lineWidth": 2, "showPoints": "never"}}},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 54},
+      "id": 30,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
+      "targets": [{"expr": "deriv(bbtop_battery_charge_percent{instance=\"$host\"}[10m]) * 3600", "legendFormat": "{{battery}} · {{status}}", "refId": "A"}],
+      "title": "Battery charge rate",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",
@@ -306,5 +317,5 @@
   "timezone": "browser",
   "title": "bbtop Linux overview",
   "uid": "bbtop-linux",
-  "version": 17
+  "version": 18
 }
