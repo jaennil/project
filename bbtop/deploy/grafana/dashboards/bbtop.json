@@ -370,7 +370,7 @@
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 149},
       "id": 36,
       "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean"]}},
-      "targets": [{"expr": "bbtop_radio_enabled{instance=\"$host\"}", "legendFormat": "{{kind}} · {{device}}", "refId": "A"}, {"expr": "bbtop_bluetooth_connections{instance=\"$host\"}", "legendFormat": "links · {{device}}", "refId": "C"}, {"expr": "bbtop_network_link_up{instance=\"$host\",kind=\"physical\"}", "legendFormat": "link · {{interface}}", "refId": "B"}],
+      "targets": [{"expr": "bbtop_radio_enabled{instance=\"$host\"}", "legendFormat": "{{kind}} · {{device}}", "refId": "A"}, {"expr": "bbtop_network_link_up{instance=\"$host\",kind=\"physical\"}", "legendFormat": "link · {{interface}}", "refId": "B"}, {"expr": "bbtop_bluetooth_connections{instance=\"$host\"}", "legendFormat": "links · {{device}}", "refId": "C"}],
       "title": "Radios and links",
       "type": "timeseries"
     },
@@ -394,5 +394,5 @@
   "timezone": "browser",
   "title": "bbtop Linux overview",
   "uid": "bbtop-linux",
-  "version": 24
+  "version": 25
 }
