@@ -329,6 +329,35 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
             u8::from(radio.enabled)
         );
     }
+    let _ = writeln!(
+        output,
+        "# HELP bbtop_bluetooth_connections Live Bluetooth links, which is what actually draws power"
+    );
+    let _ = writeln!(output, "# TYPE bbtop_bluetooth_connections gauge");
+    for radio in &snapshot.radios {
+        if let Some(connections) = radio.connections {
+            let _ = writeln!(
+                output,
+                "bbtop_bluetooth_connections{{device=\"{}\"}} {connections}",
+                escape_label(&radio.device)
+            );
+        }
+    }
+    let _ = writeln!(output, "# TYPE bbtop_wifi_signal_dbm gauge");
+    let _ = writeln!(output, "# TYPE bbtop_wifi_link_quality gauge");
+    for link in &snapshot.wireless_links {
+        let labels = format!("interface=\"{}\"", escape_label(&link.interface));
+        let _ = writeln!(
+            output,
+            "bbtop_wifi_signal_dbm{{{labels}}} {:.1}",
+            link.signal_dbm
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_wifi_link_quality{{{labels}}} {:.1}",
+            link.quality
+        );
+    }
     let _ = writeln!(output, "# TYPE bbtop_network_link_up gauge");
     for interface in &snapshot.networks {
         let _ = writeln!(
@@ -856,11 +885,13 @@ mod tests {
                     device: "hci0".into(),
                     kind: "bluetooth".into(),
                     enabled: true,
+                    connections: Some(0),
                 },
                 crate::procfs::Radio {
                     device: "phy0".into(),
                     kind: "wlan".into(),
                     enabled: false,
+                    connections: None,
                 },
             ],
             ..Snapshot::default()
@@ -869,6 +900,9 @@ mod tests {
         assert!(rendered.contains("bbtop_backlight_percent{device=\"amdgpu_bl1\"} 14.900"));
         assert!(rendered.contains("bbtop_radio_enabled{device=\"hci0\",kind=\"bluetooth\"} 1"));
         assert!(rendered.contains("bbtop_radio_enabled{device=\"phy0\",kind=\"wlan\"} 0"));
+        // The switch being on says nothing; an idle controller has no links.
+        assert!(rendered.contains("bbtop_bluetooth_connections{device=\"hci0\"} 0"));
+        assert!(!rendered.contains("bbtop_bluetooth_connections{device=\"phy0\""));
     }
 
     #[test]

@@ -35,7 +35,23 @@ pub struct Radio {
     pub device: String,
     /// What rfkill calls it: bluetooth, wlan, wwan and so on.
     pub kind: String,
+    /// Nothing blocks the radio. This says the switch is on, not that the radio
+    /// is doing anything: an unblocked Bluetooth chip with no connection costs
+    /// close to nothing.
     pub enabled: bool,
+    /// Live links, for radios that expose them. That, not the switch, is what
+    /// costs power.
+    pub connections: Option<u64>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct WirelessLink {
+    pub interface: String,
+    /// Driver-scaled link quality; the ceiling differs between drivers.
+    pub quality: f64,
+    /// Received signal strength. A weak signal means retries and more radio
+    /// time, so it shows up as power.
+    pub signal_dbm: f64,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -195,6 +211,7 @@ pub struct Snapshot {
     pub gpus: Vec<Gpu>,
     pub backlights: Vec<Backlight>,
     pub radios: Vec<Radio>,
+    pub wireless_links: Vec<WirelessLink>,
     pub browser_tabs: Vec<BrowserTab>,
     pub mains_supplies: Vec<MainsSupply>,
     pub nvme_smart: Vec<NvmeSmart>,
@@ -297,6 +314,9 @@ impl Collector {
                 .unwrap_or_default();
         let backlights = read_backlights(&self.sys_root);
         let radios = read_radios(&self.sys_root);
+        let wireless_links = fs::read_to_string(self.root.join("net/wireless"))
+            .map(|input| parse_wireless(&input))
+            .unwrap_or_default();
         let browser_tabs = read_browser_tabs(&self.runtime_root);
         let mains_supplies = read_mains_supplies(&self.sys_root);
         if self
@@ -432,6 +452,7 @@ impl Collector {
             gpus,
             backlights,
             radios,
+            wireless_links,
             browser_tabs,
             mains_supplies,
             nvme_smart: self.nvme_smart.clone(),
@@ -1025,6 +1046,40 @@ fn read_nvme_smart(runtime_root: &Path) -> Vec<NvmeSmart> {
 /// A browser tab has no identity the kernel can see: content processes carry no
 /// origin, and one process may host several tabs. The optional `bbtop-tabs`
 /// collector asks the browser itself and leaves the answer here.
+/// Each live Bluetooth link shows up as a `hciN:M` child of the controller.
+fn count_bluetooth_links(sys_root: &Path, device: &str) -> u64 {
+    let prefix = format!("{device}:");
+    fs::read_dir(sys_root.join("class/bluetooth").join(device))
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
+                .count() as u64
+        })
+        .unwrap_or(0)
+}
+
+/// `/proc/net/wireless` keeps the driver's own view of the link. Values carry a
+/// trailing dot for "this is an integer reading", which has to come off.
+fn parse_wireless(input: &str) -> Vec<WirelessLink> {
+    input
+        .lines()
+        .skip(2)
+        .filter_map(|line| {
+            let (interface, rest) = line.split_once(':')?;
+            let fields: Vec<&str> = rest.split_whitespace().collect();
+            let number = |index: usize| -> Option<f64> {
+                fields.get(index)?.trim_end_matches('.').parse().ok()
+            };
+            Some(WirelessLink {
+                interface: interface.trim().to_owned(),
+                quality: number(1)?,
+                signal_dbm: number(2)?,
+            })
+        })
+        .collect()
+}
+
 fn read_browser_tabs(runtime_root: &Path) -> Vec<BrowserTab> {
     fs::read_to_string(runtime_root.join("browser-tabs.txt"))
         .map(|input| parse_browser_tabs(&input))
@@ -1253,12 +1308,15 @@ fn read_radios(sys_root: &Path) -> Vec<Radio> {
         let blocked = ["soft", "hard"]
             .iter()
             .any(|flag| read_i64(&path.join(flag)).unwrap_or(0) != 0);
+        let device = fs::read_to_string(path.join("name"))
+            .unwrap_or_else(|_| entry.file_name().to_string_lossy().into_owned())
+            .trim()
+            .to_owned();
+        let kind = kind.trim().to_owned();
         radios.push(Radio {
-            device: fs::read_to_string(path.join("name"))
-                .unwrap_or_else(|_| entry.file_name().to_string_lossy().into_owned())
-                .trim()
-                .to_owned(),
-            kind: kind.trim().to_owned(),
+            connections: (kind == "bluetooth").then(|| count_bluetooth_links(sys_root, &device)),
+            device,
+            kind,
             enabled: !blocked,
         });
     }
@@ -1471,6 +1529,18 @@ mod tests {
     #[test]
     fn ignores_fdinfo_without_a_drm_client() {
         assert!(parse_drm_fdinfo("pos:\t0\nflags:\t02\n").is_none());
+    }
+
+    #[test]
+    fn parses_wireless_link_quality() {
+        let input = " face | tus | link level noise |  nwid\n\
+             . | . | . | . |\n\
+             wlp2s0: 0000   70.  -23.  -256        0\n";
+        let links = parse_wireless(input);
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].interface, "wlp2s0");
+        assert_eq!(links[0].quality, 70.0);
+        assert_eq!(links[0].signal_dbm, -23.0);
     }
 
     #[test]

@@ -365,13 +365,24 @@
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "description": "Radios as rfkill reports them, and the carrier state of physical interfaces. A radio counts as on only when nothing blocks it, softly or in hardware. Virtual interfaces are left out because bridges and veth pairs are always up and say nothing about power.",
-      "fieldConfig": {"defaults": {"max": 1, "min": 0, "unit": "bool_on_off", "custom": {"lineInterpolation": "stepAfter", "lineWidth": 2, "fillOpacity": 15, "showPoints": "never", "spanNulls": true}}},
+      "description": "What the radios are actually doing. A radio being unblocked in rfkill only means its switch is on: an idle Bluetooth controller with no links costs close to nothing, which is why the live link count is here next to it. Virtual interfaces are left out because bridges and veth pairs are always up.",
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short", "custom": {"lineInterpolation": "stepAfter", "lineWidth": 2, "fillOpacity": 15, "showPoints": "never", "spanNulls": true}}},
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 149},
       "id": 36,
       "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean"]}},
-      "targets": [{"expr": "bbtop_radio_enabled{instance=\"$host\"}", "legendFormat": "{{kind}} · {{device}}", "refId": "A"}, {"expr": "bbtop_network_link_up{instance=\"$host\",kind=\"physical\"}", "legendFormat": "link · {{interface}}", "refId": "B"}],
+      "targets": [{"expr": "bbtop_radio_enabled{instance=\"$host\"}", "legendFormat": "{{kind}} · {{device}}", "refId": "A"}, {"expr": "bbtop_bluetooth_connections{instance=\"$host\"}", "legendFormat": "links · {{device}}", "refId": "C"}, {"expr": "bbtop_network_link_up{instance=\"$host\",kind=\"physical\"}", "legendFormat": "link · {{interface}}", "refId": "B"}],
       "title": "Radios and links",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Link as the WiFi driver reports it. A weak signal costs battery: the radio spends longer transmitting and retries more. Quality is driver-scaled, so only its trend means anything.",
+      "fieldConfig": {"defaults": {"unit": "none"}},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 157},
+      "id": 37,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
+      "targets": [{"expr": "bbtop_wifi_signal_dbm{instance=\"$host\"}", "legendFormat": "signal dBm · {{interface}}", "refId": "A"}, {"expr": "bbtop_wifi_link_quality{instance=\"$host\"}", "legendFormat": "quality · {{interface}}", "refId": "B"}],
+      "title": "WiFi link",
       "type": "timeseries"
     }
   ],
@@ -383,5 +394,5 @@
   "timezone": "browser",
   "title": "bbtop Linux overview",
   "uid": "bbtop-linux",
-  "version": 23
+  "version": 24
 }
