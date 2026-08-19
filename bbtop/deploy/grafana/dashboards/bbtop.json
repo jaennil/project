@@ -310,23 +310,23 @@
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "description": "Per-tab figures come from the browser itself through the bbtop-tabs collector, because a content process carries no origin the kernel could report. With Fission one process can host several tabs of one site, and then they share a single number.",
+      "description": "Per-tab figures come from the browser itself through the bbtop-tabs collector, because a content process carries no origin the kernel could report. The site is shown next to the title because page titles alone are often useless. With Fission one process can host several documents of one site, and then they share a single number - bbtop_browser_tab_documents says how many.",
       "fieldConfig": {"defaults": {"min": 0, "unit": "percent"}},
       "gridPos": {"h": 9, "w": 12, "x": 0, "y": 126},
       "id": 31,
       "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
-      "targets": [{"expr": "topk(10, bbtop_browser_tab_cpu_percent{instance=\"$host\"})", "legendFormat": "{{title}}", "refId": "A"}],
+      "targets": [{"expr": "topk(10, bbtop_browser_tab_cpu_percent{instance=\"$host\"})", "legendFormat": "{{title}} · {{site}}", "refId": "A"}],
       "title": "Top browser tabs · CPU",
       "type": "timeseries"
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "description": "Per-tab figures come from the browser itself through the bbtop-tabs collector, because a content process carries no origin the kernel could report. With Fission one process can host several tabs of one site, and then they share a single number.",
+      "description": "Per-tab figures come from the browser itself through the bbtop-tabs collector, because a content process carries no origin the kernel could report. The site is shown next to the title because page titles alone are often useless. With Fission one process can host several documents of one site, and then they share a single number - bbtop_browser_tab_documents says how many.",
       "fieldConfig": {"defaults": {"min": 0, "unit": "bytes"}},
       "gridPos": {"h": 9, "w": 12, "x": 12, "y": 126},
       "id": 32,
       "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
-      "targets": [{"expr": "topk(10, bbtop_browser_tab_memory_bytes{instance=\"$host\"})", "legendFormat": "{{title}}", "refId": "A"}],
+      "targets": [{"expr": "topk(10, bbtop_browser_tab_memory_bytes{instance=\"$host\"})", "legendFormat": "{{title}} · {{site}}", "refId": "A"}],
       "title": "Top browser tabs · memory",
       "type": "timeseries"
     }
@@ -339,5 +339,5 @@
   "timezone": "browser",
   "title": "bbtop Linux overview",
   "uid": "bbtop-linux",
-  "version": 19
+  "version": 20
 }
