@@ -123,10 +123,11 @@ def site(child):
         if not candidate:
             continue
         parsed = urllib.parse.urlparse(candidate)
+        # An extension's host is a random UUID, which tells a reader nothing.
+        if parsed.scheme in ("moz-extension", "chrome-extension"):
+            return "extension"
         if parsed.hostname:
             return parsed.hostname
-        if candidate.startswith("moz-extension:"):
-            return "extension"
     return child["type"]
 
 
