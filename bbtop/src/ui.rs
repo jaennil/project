@@ -127,7 +127,15 @@ fn draw(snapshot: &Snapshot, listen: &str, sort: SortBy) -> io::Result<()> {
         snapshot.processes_total,
         snapshot.processes_running
     ));
-    output.push_str(&format!(" {}\n\n", gpu_summary(snapshot)));
+    output.push_str(&format!(
+        " {}    PROFILE {}\n\n",
+        gpu_summary(snapshot),
+        if snapshot.platform_profile.is_empty() {
+            "unknown"
+        } else {
+            &snapshot.platform_profile
+        }
+    ));
     output.push_str(
         "\x1b[1m     PID S    CPU%      RSS     READ    WRITE    NETRX    NETTX    GPU%     VRAM  NAME\x1b[0m\n",
     );

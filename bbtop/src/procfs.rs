@@ -150,6 +150,8 @@ pub struct Filesystem {
 pub struct Snapshot {
     pub timestamp: u64,
     pub hostname: String,
+    /// ACPI power profile the firmware is in: low-power, balanced, performance.
+    pub platform_profile: String,
     pub cpu_percent: f64,
     pub cpu_count: usize,
     pub memory_total: u64,
@@ -272,6 +274,10 @@ impl Collector {
         let temperature_alarms = read_temperature_alarms(&self.sys_root);
         let cpu_frequencies = read_cpu_frequencies(&self.sys_root);
         let gpus = read_gpus(&self.sys_root);
+        let platform_profile =
+            fs::read_to_string(self.sys_root.join("firmware/acpi/platform_profile"))
+                .map(|value| value.trim().to_owned())
+                .unwrap_or_default();
         let browser_tabs = read_browser_tabs(&self.runtime_root);
         let mains_supplies = read_mains_supplies(&self.sys_root);
         if self
@@ -371,6 +377,7 @@ impl Collector {
         self.previous_timestamp = Some(now);
         Ok(Snapshot {
             timestamp: now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs(),
+            platform_profile,
             hostname: fs::read_to_string(self.root.join("sys/kernel/hostname"))
                 .unwrap_or_else(|_| "unknown".into())
                 .trim()

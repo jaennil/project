@@ -302,6 +302,18 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
         );
         let _ = writeln!(output, "bbtop_filesystem_used_bytes{{{labels}}} {used}");
     }
+    if !snapshot.platform_profile.is_empty() {
+        let _ = writeln!(
+            output,
+            "# HELP bbtop_platform_profile Power profile the firmware is set to"
+        );
+        let _ = writeln!(output, "# TYPE bbtop_platform_profile gauge");
+        let _ = writeln!(
+            output,
+            "bbtop_platform_profile{{profile=\"{}\"}} 1",
+            escape_label(&snapshot.platform_profile)
+        );
+    }
     let _ = writeln!(output, "# HELP bbtop_info Host identity");
     let _ = writeln!(output, "# TYPE bbtop_info gauge");
     let _ = writeln!(
@@ -322,6 +334,7 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
         "bbtop_process_network_transmit_bytes_total",
         "bbtop_process_gpu_percent",
         "bbtop_process_gpu_vram_bytes",
+        "bbtop_process_power_estimate_watts",
     ] {
         let kind = if name.ends_with("_total") {
             "counter"
@@ -356,6 +369,24 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
             selected.push(process);
         }
     }
+    // Nothing measures the power a process draws: sensors report hardware, not
+    // tasks. What is measurable is the package as a whole, so it is split across
+    // processes by the CPU time each one used. That covers the CPU and GPU
+    // package only - the display, disk and radios drain the same battery and
+    // belong to no process at all.
+    let package_watts: f64 = snapshot
+        .power
+        .iter()
+        .filter(|power| power.reading == "input")
+        .map(|power| power.watts)
+        .sum();
+    let busy_percent = snapshot.cpu_percent * snapshot.cpu_count as f64;
+    let watts_per_percent = if busy_percent > 0.0 && package_watts > 0.0 {
+        package_watts / busy_percent
+    } else {
+        0.0
+    };
+
     // A GPU job can be nearly idle on the CPU, and VRAM it holds matters even
     // while no work runs, so both are ranked.
     let mut by_gpu: Vec<_> = snapshot.processes.iter().collect();
@@ -432,6 +463,11 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
             output,
             "bbtop_process_gpu_vram_bytes{{{labels}}} {}",
             process.gpu_vram_bytes
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_process_power_estimate_watts{{{labels}}} {:.3}",
+            process.cpu_percent * watts_per_percent
         );
     }
     output
@@ -767,6 +803,46 @@ mod tests {
         assert!(rendered.contains(
             "bbtop_network_transmit_bytes_total{interface=\"docker0\",kind=\"virtual\"} 40"
         ));
+    }
+
+    #[test]
+    fn reports_the_active_power_profile() {
+        let snapshot = Snapshot {
+            platform_profile: "performance".into(),
+            ..Snapshot::default()
+        };
+        let rendered = render_prometheus(&snapshot, 1);
+        assert!(rendered.contains("bbtop_platform_profile{profile=\"performance\"} 1"));
+        // An absent file must not publish an empty label.
+        let quiet = render_prometheus(&Snapshot::default(), 1);
+        assert!(!quiet.contains("bbtop_platform_profile"));
+    }
+
+    #[test]
+    fn splits_package_power_across_processes() {
+        let snapshot = Snapshot {
+            cpu_percent: 25.0,
+            cpu_count: 4,
+            // 100% of one core out of four busy cores gets a quarter of the package.
+            power: vec![crate::procfs::Power {
+                chip: "amdgpu".into(),
+                sensor: "PPT".into(),
+                reading: "input".into(),
+                watts: 20.0,
+            }],
+            processes: vec![Process {
+                pid: 1,
+                name: "hungry".into(),
+                cpu_percent: 100.0,
+                ..Process::default()
+            }],
+            ..Snapshot::default()
+        };
+        let rendered = render_prometheus(&snapshot, 1);
+        assert!(
+            rendered
+                .contains("bbtop_process_power_estimate_watts{pid=\"1\",name=\"hungry\"} 20.000")
+        );
     }
 
     #[test]
