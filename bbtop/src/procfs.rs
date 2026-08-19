@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ffi::CString,
     fs, io,
     os::unix::ffi::OsStrExt,
@@ -20,6 +20,17 @@ pub struct Process {
     pub write_bytes: u64,
     pub network_receive_bytes: u64,
     pub network_transmit_bytes: u64,
+    pub gpu_percent: f64,
+    pub gpu_vram_bytes: u64,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Gpu {
+    pub card: String,
+    pub driver: String,
+    pub busy_percent: f64,
+    pub vram_used_bytes: u64,
+    pub vram_total_bytes: u64,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -151,6 +162,7 @@ pub struct Snapshot {
     pub temperature_limits: Vec<TemperatureLimit>,
     pub temperature_alarms: Vec<TemperatureAlarm>,
     pub cpu_frequencies: Vec<CpuFrequency>,
+    pub gpus: Vec<Gpu>,
     pub mains_supplies: Vec<MainsSupply>,
     pub nvme_smart: Vec<NvmeSmart>,
     pub filesystems: Vec<Filesystem>,
@@ -177,6 +189,7 @@ pub struct Collector {
     page_size: u64,
     previous_cpu: CpuTimes,
     previous_process_cpu: HashMap<u32, u64>,
+    previous_process_gpu: HashMap<u32, u64>,
     previous_timestamp: Option<SystemTime>,
     previous_smart_collection: Option<SystemTime>,
     nvme_smart: Vec<NvmeSmart>,
@@ -199,6 +212,7 @@ impl Collector {
             page_size,
             previous_cpu: CpuTimes::default(),
             previous_process_cpu: HashMap::new(),
+            previous_process_gpu: HashMap::new(),
             previous_timestamp: None,
             previous_smart_collection: None,
             nvme_smart: Vec::new(),
@@ -243,6 +257,7 @@ impl Collector {
         let temperature_limits = read_temperature_limits(&self.sys_root);
         let temperature_alarms = read_temperature_alarms(&self.sys_root);
         let cpu_frequencies = read_cpu_frequencies(&self.sys_root);
+        let gpus = read_gpus(&self.sys_root);
         let mains_supplies = read_mains_supplies(&self.sys_root);
         if self
             .previous_smart_collection
@@ -256,6 +271,7 @@ impl Collector {
         let process_network = read_process_network(&self.runtime_root);
 
         let mut next_process_cpu = HashMap::new();
+        let mut next_process_gpu = HashMap::new();
         let mut processes = Vec::new();
         for entry in fs::read_dir(&self.root)? {
             let entry = match entry {
@@ -266,9 +282,11 @@ impl Collector {
                 Ok(pid) => pid,
                 Err(_) => continue,
             };
-            if let Some((mut process, cpu_ticks)) = read_process(entry.path(), pid, self.page_size)
+            if let Some((mut process, cpu_ticks, gpu_nanoseconds)) =
+                read_process(entry.path(), pid, self.page_size)
             {
                 next_process_cpu.insert(pid, cpu_ticks);
+                next_process_gpu.insert(pid, gpu_nanoseconds);
                 if let Some((receive, transmit)) = process_network.get(&pid) {
                     process.network_receive_bytes = *receive;
                     process.network_transmit_bytes = *transmit;
@@ -281,6 +299,13 @@ impl Collector {
                             .unwrap_or(cpu_ticks),
                     );
                     process.cpu_percent = delta as f64 * 100.0 / self.ticks_per_second / elapsed;
+                    let busy = gpu_nanoseconds.saturating_sub(
+                        self.previous_process_gpu
+                            .get(&pid)
+                            .copied()
+                            .unwrap_or(gpu_nanoseconds),
+                    );
+                    process.gpu_percent = busy as f64 / 10_000_000.0 / elapsed;
                 }
                 processes.push(process);
             }
@@ -293,6 +318,7 @@ impl Collector {
 
         self.previous_cpu = cpu;
         self.previous_process_cpu = next_process_cpu;
+        self.previous_process_gpu = next_process_gpu;
         self.previous_timestamp = Some(now);
         Ok(Snapshot {
             timestamp: now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs(),
@@ -328,6 +354,7 @@ impl Collector {
             temperature_limits,
             temperature_alarms,
             cpu_frequencies,
+            gpus,
             mains_supplies,
             nvme_smart: self.nvme_smart.clone(),
             filesystems,
@@ -735,6 +762,108 @@ fn read_cpu_frequencies(sys_root: &Path) -> Vec<CpuFrequency> {
     frequencies
 }
 
+/// Utilisation and VRAM as the DRM driver reports them. Intel and Nouveau leave
+/// `gpu_busy_percent` out, so cards without it are skipped rather than reported
+/// as idle.
+fn read_gpus(sys_root: &Path) -> Vec<Gpu> {
+    let mut gpus = Vec::new();
+    let Ok(cards) = fs::read_dir(sys_root.join("class/drm")) else {
+        return gpus;
+    };
+    for card in cards.flatten() {
+        let name = card.file_name().to_string_lossy().into_owned();
+        // class/drm also holds connectors like card1-eDP-1 and render nodes.
+        if !name
+            .strip_prefix("card")
+            .is_some_and(|index| !index.is_empty() && index.bytes().all(|b| b.is_ascii_digit()))
+        {
+            continue;
+        }
+        let device = card.path().join("device");
+        let Some(busy) = read_i64(&device.join("gpu_busy_percent")) else {
+            continue;
+        };
+        let driver = fs::read_link(device.join("driver"))
+            .ok()
+            .and_then(|path| {
+                path.file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+            })
+            .unwrap_or_else(|| "unknown".into());
+        gpus.push(Gpu {
+            card: name,
+            driver,
+            busy_percent: busy as f64,
+            vram_used_bytes: read_i64(&device.join("mem_info_vram_used"))
+                .unwrap_or(0)
+                .max(0) as u64,
+            vram_total_bytes: read_i64(&device.join("mem_info_vram_total"))
+                .unwrap_or(0)
+                .max(0) as u64,
+        });
+    }
+    gpus.sort_unstable_by(|a, b| a.card.cmp(&b.card));
+    gpus
+}
+
+/// Busy nanoseconds and VRAM for one process, from the DRM fdinfo interface the
+/// kernel exposes per open device handle. Engines run in parallel, so their
+/// times are summed and the result can pass 100% the same way process CPU does
+/// across cores.
+fn read_process_gpu(path: &Path) -> (u64, u64) {
+    let Ok(descriptors) = fs::read_dir(path.join("fd")) else {
+        return (0, 0);
+    };
+    let mut clients = HashSet::new();
+    let mut nanoseconds = 0;
+    let mut vram_bytes = 0;
+    for descriptor in descriptors.flatten() {
+        // Reading a link is far cheaper than opening fdinfo, and hardly any
+        // process holds a DRM handle, so the cheap test comes first.
+        if !fs::read_link(descriptor.path())
+            .is_ok_and(|target| target.starts_with(Path::new("/dev/dri")))
+        {
+            continue;
+        }
+        let Ok(info) = fs::read_to_string(path.join("fdinfo").join(descriptor.file_name())) else {
+            continue;
+        };
+        let (client, busy, vram) = parse_drm_fdinfo(&info);
+        // Duplicated descriptors report the same client, so count each once.
+        if client.is_some_and(|client| !clients.insert(client)) {
+            continue;
+        }
+        nanoseconds += busy;
+        vram_bytes += vram;
+    }
+    (nanoseconds, vram_bytes)
+}
+
+fn parse_drm_fdinfo(input: &str) -> (Option<u64>, u64, u64) {
+    let mut client = None;
+    let mut nanoseconds = 0;
+    let mut vram_bytes = 0;
+    for line in input.lines() {
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
+        let amount = || {
+            value
+                .split_whitespace()
+                .next()
+                .and_then(|amount| amount.parse::<u64>().ok())
+                .unwrap_or(0)
+        };
+        match key.trim() {
+            "drm-client-id" => client = Some(amount()),
+            "drm-memory-vram" => vram_bytes = amount() * 1024,
+            key if key.starts_with("drm-engine-") => nanoseconds += amount(),
+            _ => {}
+        }
+    }
+    (client, nanoseconds, vram_bytes)
+}
+
 fn read_mains_supplies(sys_root: &Path) -> Vec<MainsSupply> {
     let mut supplies = Vec::new();
     let Ok(entries) = fs::read_dir(sys_root.join("class/power_supply")) else {
@@ -1015,7 +1144,7 @@ fn parse_diskstats(input: &str, sys_root: &Path) -> (u64, u64) {
     })
 }
 
-fn read_process(path: PathBuf, pid: u32, page_size: u64) -> Option<(Process, u64)> {
+fn read_process(path: PathBuf, pid: u32, page_size: u64) -> Option<(Process, u64, u64)> {
     let stat = fs::read_to_string(path.join("stat")).ok()?;
     let name_start = stat.find('(')? + 1;
     let name_end = stat.rfind(')')?;
@@ -1027,6 +1156,7 @@ fn read_process(path: PathBuf, pid: u32, page_size: u64) -> Option<(Process, u64
     let threads = fields.get(17)?.parse::<u64>().unwrap_or(0);
     let virtual_bytes = fields.get(20)?.parse::<u64>().unwrap_or(0);
     let rss_pages = fields.get(21)?.parse::<u64>().unwrap_or(0);
+    let (gpu_nanoseconds, gpu_vram_bytes) = read_process_gpu(&path);
     let (read_bytes, write_bytes) = fs::read_to_string(path.join("io"))
         .ok()
         .map(|input| {
@@ -1056,8 +1186,11 @@ fn read_process(path: PathBuf, pid: u32, page_size: u64) -> Option<(Process, u64
             write_bytes,
             network_receive_bytes: 0,
             network_transmit_bytes: 0,
+            gpu_percent: 0.0,
+            gpu_vram_bytes,
         },
         user_ticks + system_ticks,
+        gpu_nanoseconds,
     ))
 }
 
@@ -1136,6 +1269,22 @@ mod tests {
         assert_eq!(fan_sensor_name("fan12_input").as_deref(), Some("fan12"));
         assert_eq!(fan_sensor_name("fan1_min"), None);
         assert_eq!(fan_sensor_name("temp1_input"), None);
+    }
+
+    #[test]
+    fn parses_drm_fdinfo() {
+        let input = "pos:\t0\ndrm-driver:\tamdgpu\ndrm-client-id:\t13\n\
+             drm-memory-vram:\t868 KiB\ndrm-engine-gfx:\t1000 ns\n\
+             drm-engine-compute:\t500 ns\n";
+        let (client, nanoseconds, vram) = parse_drm_fdinfo(input);
+        assert_eq!(client, Some(13));
+        assert_eq!(nanoseconds, 1_500);
+        assert_eq!(vram, 868 * 1024);
+    }
+
+    #[test]
+    fn ignores_fdinfo_without_drm_keys() {
+        assert_eq!(parse_drm_fdinfo("pos:\t0\nflags:\t02\n"), (None, 0, 0));
     }
 
     #[test]

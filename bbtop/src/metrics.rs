@@ -270,6 +270,7 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
             u8::from(supply.online)
         );
     }
+    render_gpus(&mut output, &snapshot.gpus);
     render_nvme_smart(&mut output, &snapshot.nvme_smart);
     for name in [
         "bbtop_filesystem_size_bytes",
@@ -318,6 +319,8 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
         "bbtop_process_write_bytes_total",
         "bbtop_process_network_receive_bytes_total",
         "bbtop_process_network_transmit_bytes_total",
+        "bbtop_process_gpu_percent",
+        "bbtop_process_gpu_vram_bytes",
     ] {
         let kind = if name.ends_with("_total") {
             "counter"
@@ -346,6 +349,22 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
     by_network.sort_unstable_by_key(|process| Reverse(process_network_bytes(process)));
     for process in by_network.into_iter().take(process_limit) {
         if process_network_bytes(process) == 0 {
+            break;
+        }
+        if pids.insert(process.pid) {
+            selected.push(process);
+        }
+    }
+    // A GPU job can be nearly idle on the CPU, and VRAM it holds matters even
+    // while no work runs, so both are ranked.
+    let mut by_gpu: Vec<_> = snapshot.processes.iter().collect();
+    by_gpu.sort_unstable_by(|a, b| {
+        b.gpu_percent
+            .total_cmp(&a.gpu_percent)
+            .then_with(|| b.gpu_vram_bytes.cmp(&a.gpu_vram_bytes))
+    });
+    for process in by_gpu.into_iter().take(process_limit) {
+        if process.gpu_percent <= 0.0 && process.gpu_vram_bytes == 0 {
             break;
         }
         if pids.insert(process.pid) {
@@ -403,6 +422,16 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
             "bbtop_process_network_transmit_bytes_total{{{labels}}} {}",
             process.network_transmit_bytes
         );
+        let _ = writeln!(
+            output,
+            "bbtop_process_gpu_percent{{{labels}}} {:.3}",
+            process.gpu_percent
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_process_gpu_vram_bytes{{{labels}}} {}",
+            process.gpu_vram_bytes
+        );
     }
     output
 }
@@ -433,6 +462,38 @@ fn render_electrical_readings(
             escape_label(&reading.chip),
             escape_label(&reading.sensor),
             reading.value
+        );
+    }
+}
+
+fn render_gpus(output: &mut String, gpus: &[crate::procfs::Gpu]) {
+    let _ = writeln!(
+        output,
+        "# HELP bbtop_gpu_busy_percent Share of time the GPU reported work in flight"
+    );
+    let _ = writeln!(output, "# TYPE bbtop_gpu_busy_percent gauge");
+    let _ = writeln!(output, "# TYPE bbtop_gpu_vram_used_bytes gauge");
+    let _ = writeln!(output, "# TYPE bbtop_gpu_vram_total_bytes gauge");
+    for gpu in gpus {
+        let labels = format!(
+            "card=\"{}\",driver=\"{}\"",
+            escape_label(&gpu.card),
+            escape_label(&gpu.driver)
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_gpu_busy_percent{{{labels}}} {:.3}",
+            gpu.busy_percent
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_gpu_vram_used_bytes{{{labels}}} {}",
+            gpu.vram_used_bytes
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_gpu_vram_total_bytes{{{labels}}} {}",
+            gpu.vram_total_bytes
         );
     }
 }
@@ -672,6 +733,45 @@ mod tests {
         assert!(rendered.contains(
             "bbtop_network_transmit_bytes_total{interface=\"docker0\",kind=\"virtual\"} 40"
         ));
+    }
+
+    #[test]
+    fn renders_gpu_load_and_gpu_processes() {
+        let snapshot = Snapshot {
+            gpus: vec![crate::procfs::Gpu {
+                card: "card1".into(),
+                driver: "amdgpu".into(),
+                busy_percent: 42.0,
+                vram_used_bytes: 1_024,
+                vram_total_bytes: 4_096,
+            }],
+            processes: vec![
+                Process {
+                    pid: 1,
+                    name: "busy".into(),
+                    cpu_percent: 99.0,
+                    ..Process::default()
+                },
+                Process {
+                    pid: 2,
+                    name: "renderer".into(),
+                    gpu_percent: 30.0,
+                    gpu_vram_bytes: 512,
+                    ..Process::default()
+                },
+            ],
+            ..Snapshot::default()
+        };
+        let rendered = render_prometheus(&snapshot, 1);
+        assert!(
+            rendered.contains("bbtop_gpu_busy_percent{card=\"card1\",driver=\"amdgpu\"} 42.000")
+        );
+        assert!(
+            rendered.contains("bbtop_gpu_vram_total_bytes{card=\"card1\",driver=\"amdgpu\"} 4096")
+        );
+        // The renderer is idle on the CPU, so only the GPU ranking can pick it up.
+        assert!(rendered.contains("bbtop_process_gpu_percent{pid=\"2\",name=\"renderer\"} 30.000"));
+        assert!(rendered.contains("bbtop_process_gpu_vram_bytes{pid=\"2\",name=\"renderer\"} 512"));
     }
 
     #[test]
