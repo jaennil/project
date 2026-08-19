@@ -307,6 +307,28 @@
       "targets": [{"expr": "deriv(bbtop_battery_charge_percent{instance=\"$host\"}[10m]) * 3600", "legendFormat": "{{battery}} · {{status}}", "refId": "A"}],
       "title": "Battery charge rate",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Per-tab figures come from the browser itself through the bbtop-tabs collector, because a content process carries no origin the kernel could report. With Fission one process can host several tabs of one site, and then they share a single number.",
+      "fieldConfig": {"defaults": {"min": 0, "unit": "percent"}},
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 126},
+      "id": 31,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
+      "targets": [{"expr": "topk(10, bbtop_browser_tab_cpu_percent{instance=\"$host\"})", "legendFormat": "{{title}}", "refId": "A"}],
+      "title": "Top browser tabs · CPU",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Per-tab figures come from the browser itself through the bbtop-tabs collector, because a content process carries no origin the kernel could report. With Fission one process can host several tabs of one site, and then they share a single number.",
+      "fieldConfig": {"defaults": {"min": 0, "unit": "bytes"}},
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 126},
+      "id": 32,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
+      "targets": [{"expr": "topk(10, bbtop_browser_tab_memory_bytes{instance=\"$host\"})", "legendFormat": "{{title}}", "refId": "A"}],
+      "title": "Top browser tabs · memory",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",
@@ -317,5 +339,5 @@
   "timezone": "browser",
   "title": "bbtop Linux overview",
   "uid": "bbtop-linux",
-  "version": 18
+  "version": 19
 }
