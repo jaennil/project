@@ -1,0 +1,29 @@
+[Unit]
+Description=bbtop per-tab browser usage collector
+After=network.target
+
+[Service]
+Type=simple
+RuntimeDirectory=bbtop
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/local/libexec/bbtop-tabs-collect
+Restart=always
+RestartSec=10
+Nice=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET
+CapabilityBoundingSet=
+# Marionette speaks only to localhost, and the browser it drives belongs to the
+# desktop user, so nothing here needs privileges beyond reaching that port.
+IPAddressDeny=any
+IPAddressAllow=localhost
+
+[Install]
+WantedBy=multi-user.target

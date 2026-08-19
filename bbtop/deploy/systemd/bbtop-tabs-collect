@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""Publish per-tab browser CPU and memory for bbtop.
+
+Only the browser knows which tab lives in which process: a content process
+carries no origin in its command line, and with Fission one process can host
+several tabs of the same site. Firefox exposes that mapping through
+ChromeUtils.requestProcInfo(), the same source about:processes reads, which is
+reachable only from privileged code inside the browser. Marionette gives us a
+chrome-context script to call it.
+
+Firefox has to be started with MOZ_MARIONETTE=1 (or --marionette) for the port
+to exist. Without it this collector just keeps retrying and bbtop reports no
+tabs.
+"""
+
+import json
+import os
+import socket
+import sys
+import time
+
+HOST = os.environ.get("BBTOP_MARIONETTE_HOST", "127.0.0.1")
+PORT = int(os.environ.get("BBTOP_MARIONETTE_PORT", "2828"))
+SNAPSHOT = os.environ.get("BBTOP_TABS_SNAPSHOT", "/run/bbtop/browser-tabs.txt")
+INTERVAL = float(os.environ.get("BBTOP_TABS_INTERVAL", "5"))
+# Titles are unbounded and change as people browse, so only the busiest are
+# published; anything more would be churning Prometheus label sets for nothing.
+LIMIT = int(os.environ.get("BBTOP_TABS_LIMIT", "15"))
+
+SCRIPT = """
+const resolve = arguments[arguments.length - 1];
+ChromeUtils.requestProcInfo().then(info => {
+  const describe = child => ({
+    pid: child.pid,
+    type: child.type,
+    origin: child.origin || "",
+    cpuTime: child.cpuTime,
+    memory: child.memory,
+    windows: (child.windows || [])
+      .filter(w => w.isProcessRoot !== false || w.documentTitle)
+      .map(w => ({
+        title: w.documentTitle || "",
+        uri: w.documentURI ? (w.documentURI.spec || String(w.documentURI)) : "",
+      })),
+  });
+  resolve(JSON.stringify({
+    parent: {pid: info.pid, cpuTime: info.cpuTime, memory: info.memory},
+    children: (info.children || []).map(describe),
+  }));
+}, error => resolve(JSON.stringify({error: String(error)})));
+"""
+
+
+class Marionette:
+    """The wire format is `<byte length>:<json>` carrying [type, id, name, params]."""
+
+    def __init__(self, host, port):
+        self.socket = socket.create_connection((host, port), timeout=15)
+        self.socket.settimeout(30)
+        self.buffer = b""
+        self.counter = 0
+        self._receive()  # server greeting
+        self.call("WebDriver:NewSession", {})
+        self.call("Marionette:SetContext", {"value": "chrome"})
+
+    def _receive(self):
+        while b":" not in self.buffer:
+            self._fill()
+        size, _, rest = self.buffer.partition(b":")
+        size = int(size)
+        self.buffer = rest
+        while len(self.buffer) < size:
+            self._fill()
+        payload, self.buffer = self.buffer[:size], self.buffer[size:]
+        return json.loads(payload)
+
+    def _fill(self):
+        chunk = self.socket.recv(65536)
+        if not chunk:
+            raise ConnectionError("marionette closed the connection")
+        self.buffer += chunk
+
+    def call(self, name, params):
+        self.counter += 1
+        message = json.dumps([0, self.counter, name, params]).encode()
+        self.socket.sendall(b"%d:%s" % (len(message), message))
+        while True:
+            response = self._receive()
+            if response[0] == 1 and response[1] == self.counter:
+                if response[2]:
+                    raise RuntimeError("%s: %s" % (name, response[2]))
+                return response[3]
+
+    def procinfo(self):
+        result = self.call(
+            "WebDriver:ExecuteAsyncScript",
+            {"script": SCRIPT, "args": [], "sandbox": "system"},
+        )
+        return json.loads(result["value"])
+
+    def close(self):
+        try:
+            self.socket.close()
+        except OSError:
+            pass
+
+
+def label(child):
+    """A tab name a human recognises, falling back to the process origin."""
+    for window in child["windows"]:
+        if window["title"]:
+            return window["title"]
+    for window in child["windows"]:
+        if window["uri"] and not window["uri"].startswith("about:"):
+            return window["uri"]
+    return child["origin"] or child["type"]
+
+
+def publish(rows):
+    temporary = SNAPSHOT + ".new"
+    with open(temporary, "w") as handle:
+        handle.write("# pid cpu_percent memory_bytes title\n")
+        for pid, percent, memory, title in rows:
+            # The title runs to the end of the line, so it must not carry one.
+            title = " ".join(title.split())[:80] or "unknown"
+            handle.write("%d %.1f %d %s\n" % (pid, percent, memory, title))
+    os.chmod(temporary, 0o644)
+    os.replace(temporary, SNAPSHOT)
+
+
+def collect():
+    session = Marionette(HOST, PORT)
+    previous = {}
+    previous_time = time.monotonic()
+    try:
+        while True:
+            info = session.procinfo()
+            if "error" in info:
+                raise RuntimeError(info["error"])
+            now = time.monotonic()
+            elapsed = now - previous_time
+            rows = []
+            current = {}
+            for child in info["children"]:
+                pid = child["pid"]
+                current[pid] = child["cpuTime"]
+                if pid in previous and elapsed > 0:
+                    # cpuTime is cumulative nanoseconds, so 1e7 ns per second of
+                    # wall clock is one percent of a core.
+                    busy = max(0, child["cpuTime"] - previous[pid])
+                    percent = busy / 1e7 / elapsed
+                else:
+                    percent = 0.0
+                rows.append((pid, percent, child["memory"], label(child)))
+            previous, previous_time = current, now
+            rows.sort(key=lambda row: (-row[1], -row[2]))
+            publish(rows[:LIMIT])
+            time.sleep(INTERVAL)
+    finally:
+        session.close()
+
+
+def main():
+    while True:
+        try:
+            collect()
+        except Exception as error:  # noqa: BLE001 - a collector must not die
+            print("bbtop-tabs-collect: %s" % error, file=sys.stderr, flush=True)
+            # Firefox may simply be closed or started without Marionette.
+            time.sleep(15)
+
+
+if __name__ == "__main__":
+    main()

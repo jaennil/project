@@ -271,6 +271,7 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
         );
     }
     render_gpus(&mut output, &snapshot.gpus);
+    render_browser_tabs(&mut output, &snapshot.browser_tabs);
     render_nvme_smart(&mut output, &snapshot.nvme_smart);
     for name in [
         "bbtop_filesystem_size_bytes",
@@ -462,6 +463,28 @@ fn render_electrical_readings(
             escape_label(&reading.chip),
             escape_label(&reading.sensor),
             reading.value
+        );
+    }
+}
+
+fn render_browser_tabs(output: &mut String, tabs: &[crate::procfs::BrowserTab]) {
+    let _ = writeln!(
+        output,
+        "# HELP bbtop_browser_tab_cpu_percent CPU a browser tab burns, as the browser accounts it"
+    );
+    let _ = writeln!(output, "# TYPE bbtop_browser_tab_cpu_percent gauge");
+    let _ = writeln!(output, "# TYPE bbtop_browser_tab_memory_bytes gauge");
+    for tab in tabs {
+        let labels = format!("pid=\"{}\",title=\"{}\"", tab.pid, escape_label(&tab.title));
+        let _ = writeln!(
+            output,
+            "bbtop_browser_tab_cpu_percent{{{labels}}} {:.3}",
+            tab.cpu_percent
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_browser_tab_memory_bytes{{{labels}}} {}",
+            tab.memory_bytes
         );
     }
 }
@@ -732,6 +755,23 @@ mod tests {
         ));
         assert!(rendered.contains(
             "bbtop_network_transmit_bytes_total{interface=\"docker0\",kind=\"virtual\"} 40"
+        ));
+    }
+
+    #[test]
+    fn renders_browser_tabs() {
+        let snapshot = Snapshot {
+            browser_tabs: vec![crate::procfs::BrowserTab {
+                pid: 7007,
+                cpu_percent: 57.3,
+                memory_bytes: 1_552,
+                title: "Grafana \"bbtop\"".into(),
+            }],
+            ..Snapshot::default()
+        };
+        let rendered = render_prometheus(&snapshot, 1);
+        assert!(rendered.contains(
+            "bbtop_browser_tab_cpu_percent{pid=\"7007\",title=\"Grafana \\\"bbtop\\\"\"} 57.300"
         ));
     }
 

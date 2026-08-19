@@ -25,6 +25,14 @@ pub struct Process {
 }
 
 #[derive(Clone, Debug, Default)]
+pub struct BrowserTab {
+    pub pid: u32,
+    pub cpu_percent: f64,
+    pub memory_bytes: u64,
+    pub title: String,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct Gpu {
     pub card: String,
     pub driver: String,
@@ -163,6 +171,7 @@ pub struct Snapshot {
     pub temperature_alarms: Vec<TemperatureAlarm>,
     pub cpu_frequencies: Vec<CpuFrequency>,
     pub gpus: Vec<Gpu>,
+    pub browser_tabs: Vec<BrowserTab>,
     pub mains_supplies: Vec<MainsSupply>,
     pub nvme_smart: Vec<NvmeSmart>,
     pub filesystems: Vec<Filesystem>,
@@ -258,6 +267,7 @@ impl Collector {
         let temperature_alarms = read_temperature_alarms(&self.sys_root);
         let cpu_frequencies = read_cpu_frequencies(&self.sys_root);
         let gpus = read_gpus(&self.sys_root);
+        let browser_tabs = read_browser_tabs(&self.runtime_root);
         let mains_supplies = read_mains_supplies(&self.sys_root);
         if self
             .previous_smart_collection
@@ -389,6 +399,7 @@ impl Collector {
             temperature_alarms,
             cpu_frequencies,
             gpus,
+            browser_tabs,
             mains_supplies,
             nvme_smart: self.nvme_smart.clone(),
             filesystems,
@@ -978,6 +989,35 @@ fn read_nvme_smart(runtime_root: &Path) -> Vec<NvmeSmart> {
 /// the whole network namespace, not the process reading it. The optional
 /// `bbtop-net` collector traces the socket layer with eBPF and publishes a table
 /// of cumulative payload bytes per PID; without it these counters stay at zero.
+/// A browser tab has no identity the kernel can see: content processes carry no
+/// origin, and one process may host several tabs. The optional `bbtop-tabs`
+/// collector asks the browser itself and leaves the answer here.
+fn read_browser_tabs(runtime_root: &Path) -> Vec<BrowserTab> {
+    fs::read_to_string(runtime_root.join("browser-tabs.txt"))
+        .map(|input| parse_browser_tabs(&input))
+        .unwrap_or_default()
+}
+
+fn parse_browser_tabs(input: &str) -> Vec<BrowserTab> {
+    input
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.splitn(4, char::is_whitespace);
+            let pid = fields.next()?.parse().ok()?;
+            let cpu_percent = fields.next()?.parse().ok()?;
+            let memory_bytes = fields.next()?.parse().ok()?;
+            // The title runs to the end of the line and may contain spaces.
+            let title = fields.next()?.trim().to_owned();
+            Some(BrowserTab {
+                pid,
+                cpu_percent,
+                memory_bytes,
+                title,
+            })
+        })
+        .collect()
+}
+
 fn read_process_network(runtime_root: &Path) -> HashMap<u32, (u64, u64)> {
     fs::read_to_string(runtime_root.join("process-net.txt"))
         .map(|input| parse_process_network(&input))
@@ -1339,6 +1379,19 @@ mod tests {
     #[test]
     fn ignores_fdinfo_without_a_drm_client() {
         assert!(parse_drm_fdinfo("pos:\t0\nflags:\t02\n").is_none());
+    }
+
+    #[test]
+    fn parses_browser_tabs_with_spaced_titles() {
+        let table = parse_browser_tabs(
+            "# pid cpu_percent memory_bytes title\n\
+             7007 57.3 1552 Grafana - bbtop Linux overview\n\
+             bad line\n",
+        );
+        assert_eq!(table.len(), 1);
+        assert_eq!(table[0].pid, 7007);
+        assert_eq!(table[0].cpu_percent, 57.3);
+        assert_eq!(table[0].title, "Grafana - bbtop Linux overview");
     }
 
     #[test]
