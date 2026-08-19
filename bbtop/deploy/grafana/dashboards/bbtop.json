@@ -8,7 +8,7 @@
       "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}},
       "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
       "id": 1,
-      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull", "mean", "max"], "values": false}},
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}},
       "targets": [{"expr": "bbtop_cpu_usage_percent{instance=\"$host\"}", "legendFormat": "CPU", "refId": "A"}],
       "title": "CPU usage",
       "type": "stat"
@@ -18,7 +18,7 @@
       "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}},
       "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
       "id": 2,
-      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull", "mean", "max"], "values": false}},
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}},
       "targets": [{"expr": "100 * (1 - bbtop_memory_available_bytes{instance=\"$host\"} / bbtop_memory_total_bytes{instance=\"$host\"})", "legendFormat": "Memory", "refId": "A"}],
       "title": "Memory usage",
       "type": "stat"
@@ -28,7 +28,7 @@
       "fieldConfig": {"defaults": {"unit": "short"}},
       "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
       "id": 3,
-      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull", "mean", "max"], "values": false}},
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}},
       "targets": [{"expr": "bbtop_processes{instance=\"$host\"}", "legendFormat": "all", "refId": "A"}, {"expr": "bbtop_processes_running{instance=\"$host\"}", "legendFormat": "running", "refId": "B"}],
       "title": "Processes",
       "type": "stat"
@@ -306,5 +306,5 @@
   "timezone": "browser",
   "title": "bbtop Linux overview",
   "uid": "bbtop-linux",
-  "version": 16
+  "version": 17
 }
