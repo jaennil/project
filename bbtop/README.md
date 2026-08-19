@@ -13,7 +13,7 @@ cargo run --release
 ```
 
 The TUI starts together with an exporter at
-`http://127.0.0.1:9099/metrics`. Keys `c`, `m`, `r`, `w`, `n`, and `p` change
+`http://127.0.0.1:9099/metrics`. Keys `c`, `m`, `r`, `w`, `n`, `g`, and `p` change
 process sorting; `q` exits. For a headless host:
 
 ```bash
@@ -79,15 +79,6 @@ would leave another dead series behind, and dashboards should sum only
 `kind="physical"`: bridges and tunnels carry copies of traffic that their
 uplink counts again.
 
-## Scope
-
-This initial version is Linux-only. It observes tasks but does not send signals
-or change process priority; those controls should be added behind explicit
-confirmation and permission checks.
-
-An experimental read-only hwmon driver for the HONOR FMI-XX is available under
-[`contrib/honor-fmi-hwmon`](contrib/honor-fmi-hwmon/README.md).
-
 ## More than one host
 
 The exporter publishes its own hostname on `bbtop_info`, and the provisioned
@@ -108,16 +99,6 @@ monitored network. [`bbtop-node.service`](deploy/systemd/bbtop-node.service) is
 for a host Prometheus can reach directly: it listens on all interfaces but
 restricts who may connect with systemd's `IPAddressAllow`, because process names
 and PIDs are in these metrics.
-
-For resilient remote collection, systemd units for a high-priority host agent
-and an outbound reverse tunnel are available in [`deploy/systemd`](deploy/systemd).
-The exporter remains bound to localhost; the tunnel exposes it only through an
-internal ClusterIP service in the homelab cluster.
-
-`bbtop-smart.timer` is an optional, separate read-only NVMe SMART collector.
-It runs `smartctl` once per minute as a tightly scoped systemd service and
-writes a world-readable snapshot to `/run/bbtop`; the main exporter receives no
-additional capabilities.
 
 ## GPU load and per-process GPU usage
 
@@ -173,3 +154,22 @@ the kernel itself are excluded, so the sum over processes is lower than the
 interface counters in `/proc/net/dev`. Bytes are attributed to the process that
 touches the socket, which for proxied traffic is the proxy rather than its
 client.
+
+## Scope
+
+This initial version is Linux-only. It observes tasks but does not send signals
+or change process priority; those controls should be added behind explicit
+confirmation and permission checks.
+
+An experimental read-only hwmon driver for the HONOR FMI-XX is available under
+[`contrib/honor-fmi-hwmon`](contrib/honor-fmi-hwmon/README.md).
+
+For resilient remote collection, systemd units for a high-priority host agent
+and an outbound reverse tunnel are available in [`deploy/systemd`](deploy/systemd).
+The exporter remains bound to localhost; the tunnel exposes it only through an
+internal ClusterIP service in the homelab cluster.
+
+`bbtop-smart.timer` is an optional, separate read-only NVMe SMART collector.
+It runs `smartctl` once per minute as a tightly scoped systemd service and
+writes a world-readable snapshot to `/run/bbtop`; the main exporter receives no
+additional capabilities.
