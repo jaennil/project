@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     ffi::CString,
     fs, io,
     os::unix::ffi::OsStrExt,
@@ -189,7 +189,7 @@ pub struct Collector {
     page_size: u64,
     previous_cpu: CpuTimes,
     previous_process_cpu: HashMap<u32, u64>,
-    previous_process_gpu: HashMap<u32, u64>,
+    previous_client_gpu: HashMap<(String, u64), u64>,
     previous_timestamp: Option<SystemTime>,
     previous_smart_collection: Option<SystemTime>,
     nvme_smart: Vec<NvmeSmart>,
@@ -212,7 +212,7 @@ impl Collector {
             page_size,
             previous_cpu: CpuTimes::default(),
             previous_process_cpu: HashMap::new(),
-            previous_process_gpu: HashMap::new(),
+            previous_client_gpu: HashMap::new(),
             previous_timestamp: None,
             previous_smart_collection: None,
             nvme_smart: Vec::new(),
@@ -271,7 +271,7 @@ impl Collector {
         let process_network = read_process_network(&self.runtime_root);
 
         let mut next_process_cpu = HashMap::new();
-        let mut next_process_gpu = HashMap::new();
+        let mut gpu_clients: HashMap<(String, u64), (u32, u32, u64, u64)> = HashMap::new();
         let mut processes = Vec::new();
         for entry in fs::read_dir(&self.root)? {
             let entry = match entry {
@@ -282,11 +282,30 @@ impl Collector {
                 Ok(pid) => pid,
                 Err(_) => continue,
             };
-            if let Some((mut process, cpu_ticks, gpu_nanoseconds)) =
+            if let Some((mut process, cpu_ticks, clients)) =
                 read_process(entry.path(), pid, self.page_size)
             {
                 next_process_cpu.insert(pid, cpu_ticks);
-                next_process_gpu.insert(pid, gpu_nanoseconds);
+                for client in clients {
+                    // A passed descriptor leaves the context visible under both
+                    // processes. Charge it to the one holding the most
+                    // descriptors on it, which is the process working with the
+                    // GPU rather than the one that opened the device for it.
+                    let entry = gpu_clients.entry(client.key).or_insert((
+                        0,
+                        pid,
+                        client.nanoseconds,
+                        client.vram_bytes,
+                    ));
+                    if (client.descriptors, pid) >= (entry.0, entry.1) {
+                        *entry = (
+                            client.descriptors,
+                            pid,
+                            client.nanoseconds,
+                            client.vram_bytes,
+                        );
+                    }
+                }
                 if let Some((receive, transmit)) = process_network.get(&pid) {
                     process.network_receive_bytes = *receive;
                     process.network_transmit_bytes = *transmit;
@@ -299,17 +318,33 @@ impl Collector {
                             .unwrap_or(cpu_ticks),
                     );
                     process.cpu_percent = delta as f64 * 100.0 / self.ticks_per_second / elapsed;
-                    let busy = gpu_nanoseconds.saturating_sub(
-                        self.previous_process_gpu
-                            .get(&pid)
-                            .copied()
-                            .unwrap_or(gpu_nanoseconds),
-                    );
-                    process.gpu_percent = busy as f64 / 10_000_000.0 / elapsed;
                 }
                 processes.push(process);
             }
         }
+        let mut next_client_gpu = HashMap::new();
+        let mut owners: HashMap<u32, (f64, u64)> = HashMap::new();
+        for (key, (_, owner, nanoseconds, vram_bytes)) in gpu_clients {
+            let previous = self
+                .previous_client_gpu
+                .get(&key)
+                .copied()
+                .unwrap_or(nanoseconds);
+            next_client_gpu.insert(key, nanoseconds);
+            let busy = nanoseconds.saturating_sub(previous);
+            let share = owners.entry(owner).or_insert((0.0, 0));
+            if elapsed > 0.0 {
+                share.0 += busy as f64 / 10_000_000.0 / elapsed;
+            }
+            share.1 += vram_bytes;
+        }
+        for process in &mut processes {
+            if let Some((gpu_percent, vram_bytes)) = owners.get(&process.pid) {
+                process.gpu_percent = *gpu_percent;
+                process.gpu_vram_bytes = *vram_bytes;
+            }
+        }
+        self.previous_client_gpu = next_client_gpu;
         processes.sort_unstable_by(|a, b| {
             b.cpu_percent
                 .total_cmp(&a.cpu_percent)
@@ -318,7 +353,6 @@ impl Collector {
 
         self.previous_cpu = cpu;
         self.previous_process_cpu = next_process_cpu;
-        self.previous_process_gpu = next_process_gpu;
         self.previous_timestamp = Some(now);
         Ok(Snapshot {
             timestamp: now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs(),
@@ -806,17 +840,27 @@ fn read_gpus(sys_root: &Path) -> Vec<Gpu> {
     gpus
 }
 
-/// Busy nanoseconds and VRAM for one process, from the DRM fdinfo interface the
-/// kernel exposes per open device handle. Engines run in parallel, so their
+/// One GPU context as the DRM fdinfo interface reports it. The counters belong
+/// to the context rather than to a process: logind opens the device and passes
+/// the descriptor on, so one context appears under several processes and has to
+/// be charged to a single one of them.
+#[derive(Clone, Debug)]
+struct DrmClient {
+    /// Client ids restart per device, so the address is part of the identity.
+    key: (String, u64),
+    nanoseconds: u64,
+    vram_bytes: u64,
+    descriptors: u32,
+}
+
+/// The DRM contexts one process holds. Engines run in parallel, so their busy
 /// times are summed and the result can pass 100% the same way process CPU does
 /// across cores.
-fn read_process_gpu(path: &Path) -> (u64, u64) {
+fn read_process_gpu(path: &Path) -> Vec<DrmClient> {
     let Ok(descriptors) = fs::read_dir(path.join("fd")) else {
-        return (0, 0);
+        return Vec::new();
     };
-    let mut clients = HashSet::new();
-    let mut nanoseconds = 0;
-    let mut vram_bytes = 0;
+    let mut clients: HashMap<(String, u64), DrmClient> = HashMap::new();
     for descriptor in descriptors.flatten() {
         // Reading a link is far cheaper than opening fdinfo, and hardly any
         // process holds a DRM handle, so the cheap test comes first.
@@ -828,18 +872,20 @@ fn read_process_gpu(path: &Path) -> (u64, u64) {
         let Ok(info) = fs::read_to_string(path.join("fdinfo").join(descriptor.file_name())) else {
             continue;
         };
-        let (client, busy, vram) = parse_drm_fdinfo(&info);
-        // Duplicated descriptors report the same client, so count each once.
-        if client.is_some_and(|client| !clients.insert(client)) {
+        let Some(client) = parse_drm_fdinfo(&info) else {
             continue;
-        }
-        nanoseconds += busy;
-        vram_bytes += vram;
+        };
+        // Descriptors duplicated inside one process repeat a single context.
+        clients
+            .entry(client.key.clone())
+            .and_modify(|known| known.descriptors += 1)
+            .or_insert(client);
     }
-    (nanoseconds, vram_bytes)
+    clients.into_values().collect()
 }
 
-fn parse_drm_fdinfo(input: &str) -> (Option<u64>, u64, u64) {
+fn parse_drm_fdinfo(input: &str) -> Option<DrmClient> {
+    let mut device = None;
     let mut client = None;
     let mut nanoseconds = 0;
     let mut vram_bytes = 0;
@@ -847,6 +893,7 @@ fn parse_drm_fdinfo(input: &str) -> (Option<u64>, u64, u64) {
         let Some((key, value)) = line.split_once(':') else {
             continue;
         };
+        let value = value.trim();
         let amount = || {
             value
                 .split_whitespace()
@@ -855,13 +902,19 @@ fn parse_drm_fdinfo(input: &str) -> (Option<u64>, u64, u64) {
                 .unwrap_or(0)
         };
         match key.trim() {
+            "drm-pdev" => device = Some(value.to_owned()),
             "drm-client-id" => client = Some(amount()),
             "drm-memory-vram" => vram_bytes = amount() * 1024,
             key if key.starts_with("drm-engine-") => nanoseconds += amount(),
             _ => {}
         }
     }
-    (client, nanoseconds, vram_bytes)
+    Some(DrmClient {
+        key: (device.unwrap_or_default(), client?),
+        nanoseconds,
+        vram_bytes,
+        descriptors: 1,
+    })
 }
 
 fn read_mains_supplies(sys_root: &Path) -> Vec<MainsSupply> {
@@ -1144,7 +1197,7 @@ fn parse_diskstats(input: &str, sys_root: &Path) -> (u64, u64) {
     })
 }
 
-fn read_process(path: PathBuf, pid: u32, page_size: u64) -> Option<(Process, u64, u64)> {
+fn read_process(path: PathBuf, pid: u32, page_size: u64) -> Option<(Process, u64, Vec<DrmClient>)> {
     let stat = fs::read_to_string(path.join("stat")).ok()?;
     let name_start = stat.find('(')? + 1;
     let name_end = stat.rfind(')')?;
@@ -1156,7 +1209,7 @@ fn read_process(path: PathBuf, pid: u32, page_size: u64) -> Option<(Process, u64
     let threads = fields.get(17)?.parse::<u64>().unwrap_or(0);
     let virtual_bytes = fields.get(20)?.parse::<u64>().unwrap_or(0);
     let rss_pages = fields.get(21)?.parse::<u64>().unwrap_or(0);
-    let (gpu_nanoseconds, gpu_vram_bytes) = read_process_gpu(&path);
+    let gpu_clients = read_process_gpu(&path);
     let (read_bytes, write_bytes) = fs::read_to_string(path.join("io"))
         .ok()
         .map(|input| {
@@ -1187,10 +1240,10 @@ fn read_process(path: PathBuf, pid: u32, page_size: u64) -> Option<(Process, u64
             network_receive_bytes: 0,
             network_transmit_bytes: 0,
             gpu_percent: 0.0,
-            gpu_vram_bytes,
+            gpu_vram_bytes: 0,
         },
         user_ticks + system_ticks,
-        gpu_nanoseconds,
+        gpu_clients,
     ))
 }
 
@@ -1273,18 +1326,19 @@ mod tests {
 
     #[test]
     fn parses_drm_fdinfo() {
-        let input = "pos:\t0\ndrm-driver:\tamdgpu\ndrm-client-id:\t13\n\
-             drm-memory-vram:\t868 KiB\ndrm-engine-gfx:\t1000 ns\n\
+        let input = "pos:\t0\ndrm-driver:\tamdgpu\ndrm-pdev:\t0000:c1:00.0\n\
+             drm-client-id:\t13\ndrm-memory-vram:\t868 KiB\ndrm-engine-gfx:\t1000 ns\n\
              drm-engine-compute:\t500 ns\n";
-        let (client, nanoseconds, vram) = parse_drm_fdinfo(input);
-        assert_eq!(client, Some(13));
-        assert_eq!(nanoseconds, 1_500);
-        assert_eq!(vram, 868 * 1024);
+        let client = parse_drm_fdinfo(input).unwrap();
+        assert_eq!(client.key, ("0000:c1:00.0".to_owned(), 13));
+        assert_eq!(client.nanoseconds, 1_500);
+        assert_eq!(client.vram_bytes, 868 * 1024);
+        assert_eq!(client.descriptors, 1);
     }
 
     #[test]
-    fn ignores_fdinfo_without_drm_keys() {
-        assert_eq!(parse_drm_fdinfo("pos:\t0\nflags:\t02\n"), (None, 0, 0));
+    fn ignores_fdinfo_without_a_drm_client() {
+        assert!(parse_drm_fdinfo("pos:\t0\nflags:\t02\n").is_none());
     }
 
     #[test]
