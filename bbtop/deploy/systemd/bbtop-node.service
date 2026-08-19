@@ -22,7 +22,12 @@ ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-CapabilityBoundingSet=
+# Reading /proc/PID/io, /proc/PID/fd and fdinfo for processes owned by other
+# users needs both: CAP_SYS_PTRACE passes the ptrace_may_access gate on those
+# files, CAP_DAC_READ_SEARCH gets past their mode bits. Without them the agent
+# still runs, but per-process disk, network and GPU figures cover only its own
+# user's processes.
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH CAP_SYS_PTRACE
 # Unlike the laptop unit this one has to answer from off the host, so the
 # listener is open but reachable only from the local network and the cluster pod
 # range. Process names and PIDs are in these metrics; nothing else should see
