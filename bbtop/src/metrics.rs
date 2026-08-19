@@ -474,8 +474,14 @@ fn render_browser_tabs(output: &mut String, tabs: &[crate::procfs::BrowserTab]) 
     );
     let _ = writeln!(output, "# TYPE bbtop_browser_tab_cpu_percent gauge");
     let _ = writeln!(output, "# TYPE bbtop_browser_tab_memory_bytes gauge");
+    let _ = writeln!(output, "# TYPE bbtop_browser_tab_documents gauge");
     for tab in tabs {
-        let labels = format!("pid=\"{}\",title=\"{}\"", tab.pid, escape_label(&tab.title));
+        let labels = format!(
+            "pid=\"{}\",site=\"{}\",title=\"{}\"",
+            tab.pid,
+            escape_label(&tab.site),
+            escape_label(&tab.title)
+        );
         let _ = writeln!(
             output,
             "bbtop_browser_tab_cpu_percent{{{labels}}} {:.3}",
@@ -485,6 +491,11 @@ fn render_browser_tabs(output: &mut String, tabs: &[crate::procfs::BrowserTab]) 
             output,
             "bbtop_browser_tab_memory_bytes{{{labels}}} {}",
             tab.memory_bytes
+        );
+        let _ = writeln!(
+            output,
+            "bbtop_browser_tab_documents{{{labels}}} {}",
+            tab.windows
         );
     }
 }
@@ -765,13 +776,15 @@ mod tests {
                 pid: 7007,
                 cpu_percent: 57.3,
                 memory_bytes: 1_552,
+                windows: 1,
+                site: "grafana.dubrovskih.ru".into(),
                 title: "Grafana \"bbtop\"".into(),
             }],
             ..Snapshot::default()
         };
         let rendered = render_prometheus(&snapshot, 1);
         assert!(rendered.contains(
-            "bbtop_browser_tab_cpu_percent{pid=\"7007\",title=\"Grafana \\\"bbtop\\\"\"} 57.300"
+            "bbtop_browser_tab_cpu_percent{pid=\"7007\",site=\"grafana.dubrovskih.ru\",title=\"Grafana \\\"bbtop\\\"\"} 57.300"
         ));
     }
 

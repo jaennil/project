@@ -18,6 +18,7 @@ import os
 import socket
 import sys
 import time
+import urllib.parse
 
 HOST = os.environ.get("BBTOP_MARIONETTE_HOST", "127.0.0.1")
 PORT = int(os.environ.get("BBTOP_MARIONETTE_PORT", "2828"))
@@ -113,17 +114,34 @@ def label(child):
     for window in child["windows"]:
         if window["uri"] and not window["uri"].startswith("about:"):
             return window["uri"]
-    return child["origin"] or child["type"]
+    return site(child) or child["type"]
+
+
+def site(child):
+    """Where the tab actually is. Titles like "User-ID" say nothing on their own."""
+    for candidate in [child.get("origin", "")] + [w["uri"] for w in child["windows"]]:
+        if not candidate:
+            continue
+        parsed = urllib.parse.urlparse(candidate)
+        if parsed.hostname:
+            return parsed.hostname
+        if candidate.startswith("moz-extension:"):
+            return "extension"
+    return child["type"]
 
 
 def publish(rows):
     temporary = SNAPSHOT + ".new"
     with open(temporary, "w") as handle:
-        handle.write("# pid cpu_percent memory_bytes title\n")
-        for pid, percent, memory, title in rows:
-            # The title runs to the end of the line, so it must not carry one.
+        handle.write("# pid cpu_percent memory_bytes windows site title\n")
+        for pid, percent, memory, windows, host, title in rows:
+            # The title runs to the end of the line, so it must not carry one,
+            # and every field before it has to stay a single token.
             title = " ".join(title.split())[:80] or "unknown"
-            handle.write("%d %.1f %d %s\n" % (pid, percent, memory, title))
+            host = "".join(host.split())[:60] or "unknown"
+            handle.write(
+                "%d %.1f %d %d %s %s\n" % (pid, percent, memory, windows, host, title)
+            )
     os.chmod(temporary, 0o644)
     os.replace(temporary, SNAPSHOT)
 
@@ -151,7 +169,16 @@ def collect():
                     percent = busy / 1e7 / elapsed
                 else:
                     percent = 0.0
-                rows.append((pid, percent, child["memory"], label(child)))
+                rows.append(
+                    (
+                        pid,
+                        percent,
+                        child["memory"],
+                        len(child["windows"]),
+                        site(child),
+                        label(child),
+                    )
+                )
             previous, previous_time = current, now
             rows.sort(key=lambda row: (-row[1], -row[2]))
             publish(rows[:LIMIT])
