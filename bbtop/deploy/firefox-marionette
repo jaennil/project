@@ -1,0 +1,11 @@
+#!/bin/sh
+# Shadows /usr/bin/firefox from /usr/local/bin, which comes first in PATH, so
+# dmenu, i3 and a plain shell all start the browser the same way.
+#
+# bbtop-tabs needs two things that can only be set at startup: MOZ_MARIONETTE
+# opens the local control port, and --remote-allow-system-access lets a session
+# on that port enter chrome context, where ChromeUtils.requestProcInfo() lives.
+# Firefox 135 and newer refuse the context switch without the flag.
+MOZ_MARIONETTE=1
+export MOZ_MARIONETTE
+exec /usr/lib/firefox/firefox --remote-allow-system-access "$@"

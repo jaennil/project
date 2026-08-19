@@ -120,6 +120,37 @@ machine with 500 processes.
 No root privileges, driver tools or vendor libraries are involved. This works
 for amdgpu and for any driver implementing the fdinfo interface.
 
+## Per-tab browser usage
+
+The kernel cannot tell one browser tab from another: a Firefox content process
+carries no origin in its command line, and with Fission a single process hosts
+several tabs of the same site. Only the browser knows the mapping, and it
+publishes it through `ChromeUtils.requestProcInfo()`, the source
+`about:processes` reads.
+
+`bbtop-tabs.service` runs
+[`bbtop-tabs-collect`](deploy/systemd/bbtop-tabs-collect), which speaks
+Marionette to the running browser on `127.0.0.1:2828`, calls that function from
+chrome context every few seconds, turns the cumulative `cpuTime` into a share of
+one core, and writes the busiest tabs to `/run/bbtop/browser-tabs.txt`. The
+exporter publishes them as `bbtop_browser_tab_cpu_percent` and
+`bbtop_browser_tab_memory_bytes`, labeled by pid and title. Only the top entries
+are published, because tab titles are unbounded and change as people browse.
+
+Firefox has to be started for this: `MOZ_MARIONETTE=1` opens the port, and
+`--remote-allow-system-access` lets a session on it reach chrome context, which
+Firefox 135 and newer refuse without the flag. Installing
+[`deploy/firefox-marionette`](deploy/firefox-marionette) as
+`/usr/local/bin/firefox` makes every launcher that resolves the browser through
+`PATH` do this, since `/usr/local/bin` precedes `/usr/bin`.
+
+That open port is a real trade-off: anything able to reach localhost can drive
+the browser through it, read cookies and run script in any page. It suits a
+single-user machine and nothing else.
+
+When a process hosts several tabs, they share one figure, exactly as
+`about:processes` shows them.
+
 ## Per-process network throughput
 
 Linux keeps no per-process network counters. `/proc/PID/io` covers disk only,
