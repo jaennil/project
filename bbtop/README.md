@@ -60,8 +60,10 @@ localhost by default.
 - hwmon voltage/current readings, valid thermal safety limits and alarms, CPU
   frequency per logical core, and external-power connection state.
 - task counts and state;
-- bounded top-CPU, top-memory and top-network process series with CPU, RSS,
-  virtual memory, threads and disk and network byte counters;
+- GPU utilisation and VRAM per card, where the DRM driver reports them;
+- bounded top-CPU, top-memory, top-network and top-GPU process series with CPU,
+  RSS, virtual memory, threads, disk and network byte counters, GPU busy time
+  and VRAM;
 - collection timestamp and host identity.
 
 Prometheus owns historical retention and rate calculation. In particular,
@@ -86,6 +88,27 @@ confirmation and permission checks.
 An experimental read-only hwmon driver for the HONOR FMI-XX is available under
 [`contrib/honor-fmi-hwmon`](contrib/honor-fmi-hwmon/README.md).
 
+## More than one host
+
+The exporter publishes its own hostname on `bbtop_info`, and the provisioned
+dashboard turns that into a Host dropdown: a visible variable over
+`label_values(bbtop_info, hostname)` picks the machine, a hidden one resolves it
+to the Prometheus `instance`, and every panel filters on that. One dashboard
+serves any number of hosts, so a panel is only ever edited once.
+
+Hosts differ in what they can report, and the dashboard does not hide it. A
+desktop has no battery, so the battery and mains panels stay empty for it; a
+machine whose GPU driver omits `gpu_busy_percent` shows no GPU load. Empty means
+the hardware or driver does not expose the reading.
+
+Two units cover the two ways a host is reached.
+[`bbtop.service`](deploy/systemd/bbtop.service) binds localhost and pairs with
+an outbound reverse tunnel, which suits a laptop that is not always on the
+monitored network. [`bbtop-node.service`](deploy/systemd/bbtop-node.service) is
+for a host Prometheus can reach directly: it listens on all interfaces but
+restricts who may connect with systemd's `IPAddressAllow`, because process names
+and PIDs are in these metrics.
+
 For resilient remote collection, systemd units for a high-priority host agent
 and an outbound reverse tunnel are available in [`deploy/systemd`](deploy/systemd).
 The exporter remains bound to localhost; the tunnel exposes it only through an
@@ -95,6 +118,26 @@ internal ClusterIP service in the homelab cluster.
 It runs `smartctl` once per minute as a tightly scoped systemd service and
 writes a world-readable snapshot to `/run/bbtop`; the main exporter receives no
 additional capabilities.
+
+## GPU load and per-process GPU usage
+
+Card utilisation and VRAM come from the DRM driver through sysfs:
+`gpu_busy_percent`, `mem_info_vram_used` and `mem_info_vram_total` under
+`/sys/class/drm/cardN/device`. Drivers that leave `gpu_busy_percent` out, Intel
+integrated graphics among them, report no card rather than a card at zero.
+
+Per-process figures come from the kernel's DRM fdinfo interface. For every
+descriptor a process holds on `/dev/dri/*`, `/proc/PID/fdinfo/N` lists
+`drm-engine-*` busy nanoseconds and `drm-memory-vram`. Engines run in parallel,
+so their busy times are summed and the result can pass 100% exactly the way
+process CPU does across cores. Descriptors duplicated within a process repeat a
+`drm-client-id`, so each client is counted once. Reading a descriptor's link is
+much cheaper than opening fdinfo and hardly any process holds a DRM handle, so
+the link is checked first; the whole sweep costs under 10 ms per collection on a
+machine with 500 processes.
+
+No root privileges, driver tools or vendor libraries are involved. This works
+for amdgpu and for any driver implementing the fdinfo interface.
 
 ## Per-process network throughput
 

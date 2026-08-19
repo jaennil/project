@@ -1,0 +1,34 @@
+[Unit]
+Description=bbtop host metrics exporter scraped over the network
+After=network-online.target local-fs.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/bbtop --no-tui --listen 0.0.0.0:9099 --interval 2 --top 50
+Restart=always
+RestartSec=2
+Nice=-10
+OOMScoreAdjust=-900
+CPUWeight=900
+IOWeight=900
+IOSchedulingClass=best-effort
+IOSchedulingPriority=0
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+# Unlike the laptop unit this one has to answer from off the host, so the
+# listener is open but reachable only from the local network and the cluster pod
+# range. Process names and PIDs are in these metrics; nothing else should see
+# them.
+IPAddressDeny=any
+IPAddressAllow=localhost 192.168.3.0/24 10.42.0.0/16
+
+[Install]
+WantedBy=multi-user.target
