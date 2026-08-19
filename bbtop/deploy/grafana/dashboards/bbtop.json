@@ -348,7 +348,7 @@
       "gridPos": {"h": 5, "w": 24, "x": 0, "y": 144},
       "id": 34,
       "options": {"legend": {"showLegend": true, "displayMode": "list", "placement": "bottom"}, "mergeValues": true, "showValue": "auto", "rowHeight": 0.9},
-      "targets": [{"expr": "bbtop_platform_profile{instance=\"$host\"}", "legendFormat": "{{profile}}", "refId": "A"}],
+      "targets": [{"expr": "bbtop_platform_profile{instance=\"$host\"}", "legendFormat": "{{profile}}", "refId": "A", "range": true, "instant": false}],
       "title": "Power profile",
       "type": "state-timeline"
     },
@@ -383,5 +383,5 @@
   "timezone": "browser",
   "title": "bbtop Linux overview",
   "uid": "bbtop-linux",
-  "version": 22
+  "version": 23
 }
