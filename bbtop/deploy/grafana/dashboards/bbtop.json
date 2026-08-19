@@ -351,6 +351,28 @@
       "targets": [{"expr": "bbtop_platform_profile{instance=\"$host\"}", "legendFormat": "{{profile}}", "refId": "A"}],
       "title": "Power profile",
       "type": "state-timeline"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Panel brightness as a share of the driver maximum. Lay it over the discharge panels: the backlight is the largest draw outside the CPU package, and unlike the package it belongs to no process.",
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 149},
+      "id": 35,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
+      "targets": [{"expr": "bbtop_backlight_percent{instance=\"$host\"}", "legendFormat": "{{device}}", "refId": "A"}],
+      "title": "Screen brightness",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Radios as rfkill reports them, and the carrier state of physical interfaces. A radio counts as on only when nothing blocks it, softly or in hardware. Virtual interfaces are left out because bridges and veth pairs are always up and say nothing about power.",
+      "fieldConfig": {"defaults": {"max": 1, "min": 0, "unit": "bool_on_off", "custom": {"lineInterpolation": "stepAfter", "lineWidth": 2, "fillOpacity": 15, "showPoints": "never", "spanNulls": true}}},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 149},
+      "id": 36,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean"]}},
+      "targets": [{"expr": "bbtop_radio_enabled{instance=\"$host\"}", "legendFormat": "{{kind}} · {{device}}", "refId": "A"}, {"expr": "bbtop_network_link_up{instance=\"$host\",kind=\"physical\"}", "legendFormat": "link · {{interface}}", "refId": "B"}],
+      "title": "Radios and links",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",
@@ -361,5 +383,5 @@
   "timezone": "browser",
   "title": "bbtop Linux overview",
   "uid": "bbtop-linux",
-  "version": 21
+  "version": 22
 }

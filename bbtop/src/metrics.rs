@@ -302,6 +302,43 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
         );
         let _ = writeln!(output, "bbtop_filesystem_used_bytes{{{labels}}} {used}");
     }
+    let _ = writeln!(
+        output,
+        "# HELP bbtop_backlight_percent Panel brightness as a share of the driver maximum"
+    );
+    let _ = writeln!(output, "# TYPE bbtop_backlight_percent gauge");
+    for backlight in &snapshot.backlights {
+        let _ = writeln!(
+            output,
+            "bbtop_backlight_percent{{device=\"{}\"}} {:.3}",
+            escape_label(&backlight.device),
+            backlight.percent
+        );
+    }
+    let _ = writeln!(
+        output,
+        "# HELP bbtop_radio_enabled Radio is on, meaning rfkill blocks it neither softly nor in hardware"
+    );
+    let _ = writeln!(output, "# TYPE bbtop_radio_enabled gauge");
+    for radio in &snapshot.radios {
+        let _ = writeln!(
+            output,
+            "bbtop_radio_enabled{{device=\"{}\",kind=\"{}\"}} {}",
+            escape_label(&radio.device),
+            escape_label(&radio.kind),
+            u8::from(radio.enabled)
+        );
+    }
+    let _ = writeln!(output, "# TYPE bbtop_network_link_up gauge");
+    for interface in &snapshot.networks {
+        let _ = writeln!(
+            output,
+            "bbtop_network_link_up{{interface=\"{}\",kind=\"{}\"}} {}",
+            escape_label(&interface.name),
+            interface.kind,
+            u8::from(interface.link_up)
+        );
+    }
     if !snapshot.platform_profile.is_empty() {
         let _ = writeln!(
             output,
@@ -784,12 +821,14 @@ mod tests {
                 crate::procfs::NetworkInterface {
                     name: "wlp2s0".into(),
                     kind: "physical".into(),
+                    link_up: true,
                     receive_bytes: 10,
                     transmit_bytes: 20,
                 },
                 crate::procfs::NetworkInterface {
                     name: "docker0".into(),
                     kind: "virtual".into(),
+                    link_up: false,
                     receive_bytes: 30,
                     transmit_bytes: 40,
                 },
@@ -803,6 +842,33 @@ mod tests {
         assert!(rendered.contains(
             "bbtop_network_transmit_bytes_total{interface=\"docker0\",kind=\"virtual\"} 40"
         ));
+    }
+
+    #[test]
+    fn reports_brightness_and_radios() {
+        let snapshot = Snapshot {
+            backlights: vec![crate::procfs::Backlight {
+                device: "amdgpu_bl1".into(),
+                percent: 14.9,
+            }],
+            radios: vec![
+                crate::procfs::Radio {
+                    device: "hci0".into(),
+                    kind: "bluetooth".into(),
+                    enabled: true,
+                },
+                crate::procfs::Radio {
+                    device: "phy0".into(),
+                    kind: "wlan".into(),
+                    enabled: false,
+                },
+            ],
+            ..Snapshot::default()
+        };
+        let rendered = render_prometheus(&snapshot, 1);
+        assert!(rendered.contains("bbtop_backlight_percent{device=\"amdgpu_bl1\"} 14.900"));
+        assert!(rendered.contains("bbtop_radio_enabled{device=\"hci0\",kind=\"bluetooth\"} 1"));
+        assert!(rendered.contains("bbtop_radio_enabled{device=\"phy0\",kind=\"wlan\"} 0"));
     }
 
     #[test]

@@ -61,6 +61,9 @@ localhost by default.
   frequency per logical core, and external-power connection state.
 - task counts and state;
 - GPU utilisation and VRAM per card, where the DRM driver reports them;
+- panel brightness, radio state from rfkill, interface carrier state and the
+  ACPI power profile, so what drains the battery can be read next to what the
+  machine was set to;
 - bounded top-CPU, top-memory, top-network and top-GPU process series with CPU,
   RSS, virtual memory, threads, disk and network byte counters, GPU busy time
   and VRAM;

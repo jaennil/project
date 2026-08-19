@@ -25,6 +25,20 @@ pub struct Process {
 }
 
 #[derive(Clone, Debug, Default)]
+pub struct Backlight {
+    pub device: String,
+    pub percent: f64,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Radio {
+    pub device: String,
+    /// What rfkill calls it: bluetooth, wlan, wwan and so on.
+    pub kind: String,
+    pub enabled: bool,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct BrowserTab {
     pub pid: u32,
     pub cpu_percent: f64,
@@ -53,6 +67,7 @@ pub struct NetworkInterface {
     /// Bridges, tunnels and loopback are `virtual` and carry copies of traffic
     /// that its uplink counts again, so summing every interface triple counts.
     pub kind: String,
+    pub link_up: bool,
     pub receive_bytes: u64,
     pub transmit_bytes: u64,
 }
@@ -178,6 +193,8 @@ pub struct Snapshot {
     pub temperature_alarms: Vec<TemperatureAlarm>,
     pub cpu_frequencies: Vec<CpuFrequency>,
     pub gpus: Vec<Gpu>,
+    pub backlights: Vec<Backlight>,
+    pub radios: Vec<Radio>,
     pub browser_tabs: Vec<BrowserTab>,
     pub mains_supplies: Vec<MainsSupply>,
     pub nvme_smart: Vec<NvmeSmart>,
@@ -278,6 +295,8 @@ impl Collector {
             fs::read_to_string(self.sys_root.join("firmware/acpi/platform_profile"))
                 .map(|value| value.trim().to_owned())
                 .unwrap_or_default();
+        let backlights = read_backlights(&self.sys_root);
+        let radios = read_radios(&self.sys_root);
         let browser_tabs = read_browser_tabs(&self.runtime_root);
         let mains_supplies = read_mains_supplies(&self.sys_root);
         if self
@@ -411,6 +430,8 @@ impl Collector {
             temperature_alarms,
             cpu_frequencies,
             gpus,
+            backlights,
+            radios,
             browser_tabs,
             mains_supplies,
             nvme_smart: self.nvme_smart.clone(),
@@ -1179,18 +1200,70 @@ fn first_number(input: &str) -> Option<f64> {
 fn read_networks(input: &str, sys_root: &Path) -> Vec<NetworkInterface> {
     let mut interfaces = parse_net_dev(input);
     for interface in &mut interfaces {
-        interface.kind = if sys_root
-            .join("class/net")
-            .join(&interface.name)
-            .join("device")
-            .exists()
-        {
+        let directory = sys_root.join("class/net").join(&interface.name);
+        interface.kind = if directory.join("device").exists() {
             "physical".into()
         } else {
             "virtual".into()
         };
+        interface.link_up = fs::read_to_string(directory.join("operstate"))
+            .map(|state| state.trim() == "up")
+            .unwrap_or(false);
     }
     interfaces
+}
+
+/// Panel brightness as a share of the maximum the driver accepts. The scale is
+/// device specific, so the raw value on its own says nothing.
+fn read_backlights(sys_root: &Path) -> Vec<Backlight> {
+    let mut backlights = Vec::new();
+    let Ok(entries) = fs::read_dir(sys_root.join("class/backlight")) else {
+        return backlights;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(maximum) = read_i64(&path.join("max_brightness")).filter(|value| *value > 0)
+        else {
+            continue;
+        };
+        let Some(current) = read_i64(&path.join("brightness")) else {
+            continue;
+        };
+        backlights.push(Backlight {
+            device: entry.file_name().to_string_lossy().into_owned(),
+            percent: current.max(0) as f64 * 100.0 / maximum as f64,
+        });
+    }
+    backlights.sort_unstable_by(|a, b| a.device.cmp(&b.device));
+    backlights
+}
+
+/// Radios as rfkill sees them. A radio counts as on only when nothing blocks
+/// it: `soft` is the switch software flips, `hard` a physical one.
+fn read_radios(sys_root: &Path) -> Vec<Radio> {
+    let mut radios = Vec::new();
+    let Ok(entries) = fs::read_dir(sys_root.join("class/rfkill")) else {
+        return radios;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(kind) = fs::read_to_string(path.join("type")) else {
+            continue;
+        };
+        let blocked = ["soft", "hard"]
+            .iter()
+            .any(|flag| read_i64(&path.join(flag)).unwrap_or(0) != 0);
+        radios.push(Radio {
+            device: fs::read_to_string(path.join("name"))
+                .unwrap_or_else(|_| entry.file_name().to_string_lossy().into_owned())
+                .trim()
+                .to_owned(),
+            kind: kind.trim().to_owned(),
+            enabled: !blocked,
+        });
+    }
+    radios.sort_unstable_by(|a, b| (&a.kind, &a.device).cmp(&(&b.kind, &b.device)));
+    radios
 }
 
 /// Every interface gets its own series so that a counter reset stays local to
@@ -1214,6 +1287,7 @@ fn parse_net_dev(input: &str) -> Vec<NetworkInterface> {
             Some(NetworkInterface {
                 name: name.to_owned(),
                 kind: String::new(),
+                link_up: false,
                 receive_bytes: values.first().copied().unwrap_or(0),
                 transmit_bytes: values.get(8).copied().unwrap_or(0),
             })
@@ -1360,12 +1434,14 @@ mod tests {
             NetworkInterface {
                 name: "eth0".into(),
                 kind: "physical".into(),
+                link_up: true,
                 receive_bytes: 10,
                 transmit_bytes: 20,
             },
             NetworkInterface {
                 name: "docker0".into(),
                 kind: "virtual".into(),
+                link_up: true,
                 receive_bytes: 1_000,
                 transmit_bytes: 2_000,
             },
