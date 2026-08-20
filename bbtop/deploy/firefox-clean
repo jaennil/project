@@ -1,0 +1,13 @@
+#!/bin/sh
+# A second Firefox next to the everyday one, for pages that refuse an automated
+# browser. Marionette makes Firefox report navigator.webdriver as true, and
+# Cloudflare treats that as a bot, so the main browser cannot pass its check
+# while per-tab collection is on.
+#
+# Its own profile directory plus --no-remote is what allows a concurrent
+# instance: without them the launch would just hand the URL to the running
+# browser, which is the one being blocked.
+profile="${XDG_CACHE_HOME:-$HOME/.cache}/firefox-clean"
+mkdir -p "$profile"
+unset MOZ_MARIONETTE
+exec /usr/lib/firefox/firefox --no-remote --new-instance --profile "$profile" "$@"
