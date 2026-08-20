@@ -1,13 +1,156 @@
-#!/bin/sh
-# A second Firefox next to the everyday one, for pages that refuse an automated
-# browser. Marionette makes Firefox report navigator.webdriver as true, and
-# Cloudflare treats that as a bot, so the main browser cannot pass its check
-# while per-tab collection is on.
-#
-# Its own profile directory plus --no-remote is what allows a concurrent
-# instance: without them the launch would just hand the URL to the running
-# browser, which is the one being blocked.
-profile="${XDG_CACHE_HOME:-$HOME/.cache}/firefox-clean"
-mkdir -p "$profile"
-unset MOZ_MARIONETTE
-exec /usr/lib/firefox/firefox --no-remote --new-instance --profile "$profile" "$@"
+#!/usr/bin/env python3
+"""Start a second Firefox that pages do not see as automated.
+
+Marionette makes Firefox report navigator.webdriver as true, and Cloudflare
+treats that as a bot, so the everyday browser cannot pass its check while
+per-tab collection is on. One profile cannot back two live instances - Firefox
+locks it, and sharing it would corrupt its databases - so this runs on a profile
+of its own and carries the logins over.
+
+Cookies and password stores are copied through SQLite's online backup, which is
+safe against the running browser; a plain file copy of a live database can land
+mid-transaction.
+"""
+
+import configparser
+import glob
+import os
+import shutil
+import sqlite3
+import sys
+import time
+
+FIREFOX = "/usr/lib/firefox/firefox"
+CLEAN = os.path.join(
+    os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "firefox-clean"
+)
+# Session cookies live in the first, saved passwords need the other two.
+# Cookies carry site sessions; the key store plus logins hold saved passwords,
+# which recent Firefox keeps in logins.db while older builds used logins.json.
+DATABASES = ["cookies.sqlite", "key4.db", "cert9.db", "logins.db"]
+FILES = ["logins.json"]
+
+
+def profile_roots():
+    for root in ("~/.config/mozilla/firefox", "~/.mozilla/firefox"):
+        expanded = os.path.expanduser(root)
+        if os.path.isdir(expanded):
+            yield expanded
+
+
+def main_profile():
+    """The profile actually in use. Picking by name would be wrong: leftover
+    profiles sort ahead of the live one and would copy nobody's logins."""
+    for root in profile_roots():
+        settings = configparser.ConfigParser()
+        try:
+            settings.read(os.path.join(root, "profiles.ini"))
+        except configparser.Error:
+            settings = None
+        for section in settings.sections() if settings else []:
+            if section.startswith("Install") and settings[section].get("Default"):
+                candidate = os.path.join(root, settings[section]["Default"])
+                if os.path.isdir(candidate):
+                    return candidate
+        # No install section: fall back to whichever profile was written last.
+        candidates = [
+            directory
+            for directory in glob.glob(os.path.join(root, "*"))
+            if os.path.exists(os.path.join(directory, "cookies.sqlite"))
+        ]
+        if candidates:
+            return max(
+                candidates,
+                key=lambda directory: os.path.getmtime(
+                    os.path.join(directory, "cookies.sqlite")
+                ),
+            )
+    return None
+
+
+def clean_profile_in_use():
+    """Overwriting the databases under a running instance would corrupt them."""
+    for entry in glob.glob("/proc/[0-9]*/cmdline"):
+        try:
+            with open(entry, "rb") as handle:
+                arguments = handle.read().split(b"\0")
+        except OSError:
+            continue
+        if CLEAN.encode() in arguments and b"--profile" in arguments:
+            return True
+    return False
+
+
+def copy_database(source, target):
+    """Firefox opens its databases with locking_mode=EXCLUSIVE, so SQLite's own
+    online backup would block until the browser exits. Copying the file with its
+    write-ahead log and then checking the result is what works on a live
+    profile; a torn copy is detected and retried rather than trusted."""
+    for attempt in range(3):
+        for suffix in ("", "-wal", "-shm"):
+            piece = source + suffix
+            if os.path.exists(piece):
+                shutil.copy2(piece, target + suffix)
+            elif os.path.exists(target + suffix):
+                os.remove(target + suffix)
+        try:
+            connection = sqlite3.connect(target)
+            try:
+                if connection.execute("pragma integrity_check").fetchone()[0] == "ok":
+                    connection.execute("pragma wal_checkpoint(truncate)")
+                    return True
+            finally:
+                connection.close()
+        except sqlite3.DatabaseError:
+            pass
+        time.sleep(1.0 + attempt)
+    return False
+
+
+def sync(profile):
+    os.makedirs(CLEAN, exist_ok=True)
+    failed = []
+    for name in DATABASES:
+        source = os.path.join(profile, name)
+        if os.path.exists(source) and not copy_database(source, os.path.join(CLEAN, name)):
+            failed.append(name)
+    if failed:
+        print("could not copy cleanly: %s" % ", ".join(failed), file=sys.stderr)
+    for name in FILES:
+        source = os.path.join(profile, name)
+        if os.path.exists(source):
+            shutil.copy2(source, os.path.join(CLEAN, name))
+
+
+def main():
+    arguments = sys.argv[1:]
+    sync_only = "--sync-only" in arguments
+    if sync_only:
+        arguments.remove("--sync-only")
+    if "--no-sync" in arguments:
+        arguments.remove("--no-sync")
+    else:
+        profile = main_profile()
+        if clean_profile_in_use():
+            print("clean profile is already running, leaving its data alone", file=sys.stderr)
+        elif profile:
+            sync(profile)
+            print("logins copied from %s" % profile, file=sys.stderr)
+        else:
+            print("no main profile found, starting empty", file=sys.stderr)
+    if sync_only:
+        return
+    os.makedirs(CLEAN, exist_ok=True)
+    environment = dict(os.environ)
+    environment.pop("MOZ_MARIONETTE", None)
+    # --no-remote and a private profile are what let this run next to the
+    # everyday browser instead of handing it the URL.
+    os.execve(
+        FIREFOX,
+        [FIREFOX, "--no-remote", "--new-instance", "--profile", CLEAN] + arguments,
+        environment,
+    )
+
+
+if __name__ == "__main__":
+    main()
