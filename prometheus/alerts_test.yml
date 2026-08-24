@@ -25,6 +25,8 @@ tests:
         values: '18000+0x65'
       - series: 'agent_rate_limit_window_seconds{provider="claude_code",limit="subscription",bucket="five_hour",window="5h"}'
         values: '18000+0x65'
+      - series: 'agent_rate_limit_last_update_timestamp_seconds{provider="claude_code",limit="subscription",bucket="five_hour",window="5h"}'
+        values: '3900+60x65'
     alert_rule_test:
       - eval_time: 1h5m
         alertname: AgentRateLimitPaceHigh

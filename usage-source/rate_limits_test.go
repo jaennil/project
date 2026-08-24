@@ -58,6 +58,30 @@ func TestRateLimitStorePersistsNewestSample(t *testing.T) {
 	}
 }
 
+func TestRateLimitStoreRemovesSupersededWindow(t *testing.T) {
+	store, err := openRateLimitStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	monthly := testRateLimitSample(99, 100)
+	monthly.Window = "30d"
+	monthly.WindowSeconds = 30 * 24 * 60 * 60
+	weekly := testRateLimitSample(3, 200)
+	weekly.Window = "7d"
+	weekly.WindowSeconds = 7 * 24 * 60 * 60
+	if err := store.observe(monthly); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.observe(weekly); err != nil {
+		t.Fatal(err)
+	}
+
+	samples := store.snapshot()
+	if len(samples) != 1 || samples[0] != weekly {
+		t.Fatalf("superseded window was retained: %+v", samples)
+	}
+}
+
 func TestClaudeRateLimitDoesNotRegressWithinResetWindow(t *testing.T) {
 	store, err := openRateLimitStore(t.TempDir())
 	if err != nil {

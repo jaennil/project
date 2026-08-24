@@ -88,12 +88,30 @@ func (s *rateLimitStore) observe(samples ...rateLimitSample) error {
 		if exists && !shouldReplaceRateLimit(current, sample) {
 			continue
 		}
-		if exists && current == sample {
-			continue
+		if !exists || current != sample {
+			previous[key] = previousSample{sample: current, exists: exists}
+			s.samples[key] = sample
+			changed = true
 		}
-		previous[key] = previousSample{sample: current, exists: exists}
-		s.samples[key] = sample
-		changed = true
+
+		// Codex can replace the shape of an account limit (for example, an
+		// experimental 30-day primary window with the Plus seven-day window).
+		// A newer sample for the same logical bucket supersedes older window
+		// durations; keeping both creates phantom limits and false alerts.
+		for existingKey, existing := range s.samples {
+			if existingKey == key ||
+				existing.Provider != sample.Provider ||
+				existing.Limit != sample.Limit ||
+				existing.Bucket != sample.Bucket ||
+				existing.ObservedAt > sample.ObservedAt {
+				continue
+			}
+			if _, tracked := previous[existingKey]; !tracked {
+				previous[existingKey] = previousSample{sample: existing, exists: true}
+			}
+			delete(s.samples, existingKey)
+			changed = true
+		}
 	}
 	if !changed {
 		return nil
