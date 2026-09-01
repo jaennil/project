@@ -25,6 +25,16 @@ pub struct Process {
 }
 
 #[derive(Clone, Debug, Default)]
+pub struct PressureStall {
+    /// cpu, memory or io.
+    pub resource: String,
+    /// `some` counts time with at least one task stalled, `full` time with
+    /// every task stalled - the second is what a freeze looks like.
+    pub scope: String,
+    pub seconds: f64,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct Backlight {
     pub device: String,
     pub percent: f64,
@@ -211,6 +221,7 @@ pub struct Snapshot {
     pub gpus: Vec<Gpu>,
     pub backlights: Vec<Backlight>,
     pub radios: Vec<Radio>,
+    pub pressure: Vec<PressureStall>,
     pub wireless_links: Vec<WirelessLink>,
     pub browser_tabs: Vec<BrowserTab>,
     pub mains_supplies: Vec<MainsSupply>,
@@ -314,6 +325,7 @@ impl Collector {
                 .unwrap_or_default();
         let backlights = read_backlights(&self.sys_root);
         let radios = read_radios(&self.sys_root);
+        let pressure = read_pressure(&self.root);
         let wireless_links = fs::read_to_string(self.root.join("net/wireless"))
             .map(|input| parse_wireless(&input))
             .unwrap_or_default();
@@ -452,6 +464,7 @@ impl Collector {
             gpus,
             backlights,
             radios,
+            pressure,
             wireless_links,
             browser_tabs,
             mains_supplies,
@@ -1268,6 +1281,40 @@ fn read_networks(input: &str, sys_root: &Path) -> Vec<NetworkInterface> {
     interfaces
 }
 
+/// Time tasks spent unable to run for want of a resource, straight from the
+/// kernel's pressure accounting. This is the one signal that survives a freeze
+/// of any cause: a device that stops answering, a memory squeeze or a CPU
+/// queue all show up here, whether or not anything reports an error.
+fn read_pressure(proc_root: &Path) -> Vec<PressureStall> {
+    let mut stalls = Vec::new();
+    for resource in ["cpu", "memory", "io"] {
+        let Ok(input) = fs::read_to_string(proc_root.join("pressure").join(resource)) else {
+            continue;
+        };
+        for line in input.lines() {
+            let mut fields = line.split_whitespace();
+            let Some(scope) = fields.next() else {
+                continue;
+            };
+            let total = fields.find_map(|field| {
+                field
+                    .strip_prefix("total=")
+                    .and_then(|value| value.parse::<u64>().ok())
+            });
+            if let Some(total) = total {
+                stalls.push(PressureStall {
+                    resource: resource.to_owned(),
+                    scope: scope.to_owned(),
+                    // The kernel counts microseconds; seconds make it a counter
+                    // whose rate reads directly as a share of wall clock.
+                    seconds: total as f64 / 1_000_000.0,
+                });
+            }
+        }
+    }
+    stalls
+}
+
 /// Panel brightness as a share of the maximum the driver accepts. The scale is
 /// device specific, so the raw value on its own says nothing.
 fn read_backlights(sys_root: &Path) -> Vec<Backlight> {
@@ -1529,6 +1576,17 @@ mod tests {
     #[test]
     fn ignores_fdinfo_without_a_drm_client() {
         assert!(parse_drm_fdinfo("pos:\t0\nflags:\t02\n").is_none());
+    }
+
+    #[test]
+    fn parses_pressure_totals() {
+        let stalls = read_pressure(Path::new("/proc"));
+        // A kernel without pressure accounting simply reports nothing.
+        for stall in &stalls {
+            assert!(["cpu", "memory", "io"].contains(&stall.resource.as_str()));
+            assert!(["some", "full"].contains(&stall.scope.as_str()));
+            assert!(stall.seconds >= 0.0);
+        }
     }
 
     #[test]

@@ -384,6 +384,17 @@
       "targets": [{"expr": "bbtop_wifi_signal_dbm{instance=\"$host\"}", "legendFormat": "signal dBm · {{interface}}", "refId": "A"}, {"expr": "bbtop_wifi_link_quality{instance=\"$host\"}", "legendFormat": "quality · {{interface}}", "refId": "B"}],
       "title": "WiFi link",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Share of wall clock the kernel says tasks were stalled waiting for a resource. `full` means nothing could run at all - that is what a freeze looks like from inside. It records the stall whatever caused it, including a device that stops answering and reports no error of its own, which is why it is the one signal worth keeping for faults that show up once a quarter.",
+      "fieldConfig": {"defaults": {"min": 0, "unit": "percentunit"}},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 165},
+      "id": 38,
+      "options": {"legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max", "mean", "median"]}},
+      "targets": [{"expr": "rate(bbtop_pressure_stall_seconds_total{instance=\"$host\"}[$__rate_interval])", "legendFormat": "{{resource}} · {{scope}}", "refId": "A"}],
+      "title": "Stalls waiting on resources",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",
@@ -394,5 +405,5 @@
   "timezone": "browser",
   "title": "bbtop Linux overview",
   "uid": "bbtop-linux",
-  "version": 25
+  "version": 26
 }

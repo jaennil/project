@@ -61,6 +61,8 @@ localhost by default.
   frequency per logical core, and external-power connection state.
 - task counts and state;
 - GPU utilisation and VRAM per card, where the DRM driver reports them;
+- kernel pressure stalls per resource, which record a freeze even when the
+  hardware that caused it reports no error at all;
 - panel brightness, radio state from rfkill, interface carrier state and the
   ACPI power profile, so what drains the battery can be read next to what the
   machine was set to;

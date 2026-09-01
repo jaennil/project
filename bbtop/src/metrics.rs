@@ -304,6 +304,18 @@ pub fn render_prometheus(snapshot: &Snapshot, process_limit: usize) -> String {
     }
     let _ = writeln!(
         output,
+        "# HELP bbtop_pressure_stall_seconds_total Time tasks were stalled waiting for a resource"
+    );
+    let _ = writeln!(output, "# TYPE bbtop_pressure_stall_seconds_total counter");
+    for stall in &snapshot.pressure {
+        let _ = writeln!(
+            output,
+            "bbtop_pressure_stall_seconds_total{{resource=\"{}\",scope=\"{}\"}} {:.6}",
+            stall.resource, stall.scope, stall.seconds
+        );
+    }
+    let _ = writeln!(
+        output,
         "# HELP bbtop_backlight_percent Panel brightness as a share of the driver maximum"
     );
     let _ = writeln!(output, "# TYPE bbtop_backlight_percent gauge");
@@ -870,6 +882,22 @@ mod tests {
         ));
         assert!(rendered.contains(
             "bbtop_network_transmit_bytes_total{interface=\"docker0\",kind=\"virtual\"} 40"
+        ));
+    }
+
+    #[test]
+    fn reports_pressure_as_a_counter() {
+        let snapshot = Snapshot {
+            pressure: vec![crate::procfs::PressureStall {
+                resource: "io".into(),
+                scope: "full".into(),
+                seconds: 60.75,
+            }],
+            ..Snapshot::default()
+        };
+        let rendered = render_prometheus(&snapshot, 1);
+        assert!(rendered.contains(
+            "bbtop_pressure_stall_seconds_total{resource=\"io\",scope=\"full\"} 60.750000"
         ));
     }
 
