@@ -29,7 +29,7 @@ groups:
           (agent_rate_limit_reset_timestamp_seconds > time())
           and on (provider, limit, bucket, window)
           (agent_rate_limit_last_update_timestamp_seconds > time() - 900)
-        for: 5m
+        for: 0m
         labels:
           severity: warning
         annotations:
