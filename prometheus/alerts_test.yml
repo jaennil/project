@@ -39,7 +39,7 @@ tests:
               severity: warning
             exp_annotations:
               summary: "claude_code 5h usage is ahead of budget"
-              description: "Usage is above the linear budget for the current provider-defined reset window."
+              description: "Usage is 3.3 percentage points above the current linear budget."
 
   - interval: 1m
     input_series:

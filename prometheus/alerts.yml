@@ -19,9 +19,11 @@ groups:
       - alert: AgentRateLimitPaceHigh
         expr: |
           (
-            agent_rate_limit_used_ratio
-            > on (provider, limit, bucket, window)
-            agent_rate_limit_linear_budget_ratio
+            100 * (
+              agent_rate_limit_used_ratio
+              - on (provider, limit, bucket, window)
+              agent_rate_limit_linear_budget_ratio
+            ) > 0
           )
           and on (provider, limit, bucket, window)
           (agent_rate_limit_reset_timestamp_seconds > time())
@@ -32,7 +34,7 @@ groups:
           severity: warning
         annotations:
           summary: "{{ $labels.provider }} {{ $labels.window }} usage is ahead of budget"
-          description: "Usage is above the linear budget for the current provider-defined reset window."
+          description: "Usage is {{ printf \"%.1f\" $value }} percentage points above the current linear budget."
 
       - alert: AgentRateLimitCritical
         expr: |
