@@ -5,7 +5,7 @@ After=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/ssh -F /dev/null -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/home/jaennil/.ssh/known_hosts -p 32222 -R 0.0.0.0:19090:127.0.0.1:9090 tunnel.dubrovskih.ru
+ExecStart=/usr/bin/ssh -F /dev/null -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/home/jaennil/.ssh/known_hosts -p 32222 -R 0.0.0.0:19090:127.0.0.1:9090 -R 0.0.0.0:18123:127.0.0.1:8123 tunnel.dubrovskih.ru
 Restart=always
 RestartSec=5
 NoNewPrivileges=true
